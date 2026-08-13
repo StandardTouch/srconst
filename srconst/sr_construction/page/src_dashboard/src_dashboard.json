@@ -1,0 +1,13 @@
+{
+ "name": "src-dashboard",
+ "page_name": "src-dashboard",
+ "title": "Admin Dashboard",
+ "module": "Sr Construction",
+ "doctype": "Page",
+ "system_page": 0,
+ "standard": "Yes",
+ "roles": [
+  {"role": "System Manager"},
+  {"role": "SRC MD"}
+ ]
+}
