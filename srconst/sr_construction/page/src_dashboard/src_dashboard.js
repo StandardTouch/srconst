@@ -363,7 +363,10 @@ class SRCDashboard {
 
 	_overdue_badge(days) {
 		const cls = days >= 60 ? "src-badge--danger" : days >= 30 ? "src-badge--warning" : "src-badge--info";
-		return `<span class="src-badge ${cls}">${frappe.utils.escape_html(days)}d</span>`;
+		const weeks = Math.floor((days || 0) / 7);
+		const rem_days = (days || 0) % 7;
+		const label = weeks > 0 ? `${weeks}w${rem_days ? " " + rem_days + "d" : ""}` : `${days || 0}d`;
+		return `<span class="src-badge ${cls}">${frappe.utils.escape_html(label)}</span>`;
 	}
 
 	// ── Labour summary ───────────────────────────────────────────────────
@@ -416,31 +419,80 @@ class SRCDashboard {
 
 	_render_stock_levels(rows) {
 		if (!rows) return;
+		this._stock_rows = rows;
 		const $target = this.$main.find(".src-stock-levels");
 		if (!rows.length) {
 			$target.html(`<div class="src-empty">No stock on hand.</div>`);
 			return;
 		}
-		const max_qty = Math.max(...rows.map((r) => r.actual_qty || 0), 1);
-		const body = rows
-			.map((r) => {
-				const pct = Math.max(4, Math.round(((r.actual_qty || 0) / max_qty) * 100));
+		const search_term = this._stock_search_term || "";
+		$target.html(`
+			<div class="src-search-row">
+				${ICON("search")}
+				<input type="text" class="src-search-input" placeholder="Search site / warehouse…" value="${frappe.utils.escape_html(
+					search_term
+				)}">
+			</div>
+			<div class="src-stock-groups"></div>
+		`);
+		$target.find(".src-search-input").on("input", (e) => {
+			this._stock_search_term = $(e.target).val() || "";
+			this._filter_stock_groups(this._stock_search_term);
+		});
+		this._filter_stock_groups(search_term);
+	}
+
+	_filter_stock_groups(term) {
+		const $target = this.$main.find(".src-stock-levels .src-stock-groups");
+		const rows = this._stock_rows || [];
+		const needle = term.trim().toLowerCase();
+
+		const groups = {};
+		rows.forEach((r) => {
+			const site = r.warehouse || "Unassigned";
+			(groups[site] = groups[site] || []).push(r);
+		});
+
+		const sites = Object.keys(groups)
+			.filter((site) => !needle || site.toLowerCase().includes(needle))
+			.sort();
+
+		if (!sites.length) {
+			$target.html(`<div class="src-empty">No matching site.</div>`);
+			return;
+		}
+
+		const html = sites
+			.map((site) => {
+				const site_rows = groups[site];
+				const max_qty = Math.max(...site_rows.map((r) => r.actual_qty || 0), 1);
+				const bars = site_rows
+					.map((r) => {
+						const pct = Math.max(4, Math.round(((r.actual_qty || 0) / max_qty) * 100));
+						return `
+						<div class="src-bar-row">
+							<div class="src-bar-info">
+								<span class="src-bar-label">${frappe.utils.escape_html(r.item_name || r.item_code)}</span>
+							</div>
+							<div class="src-progress-track src-progress-track--thin">
+								<div class="src-progress-fill" style="width:${pct}%;background:var(--blue-600)"></div>
+							</div>
+							<span class="src-bar-value">${frappe.utils.escape_html(r.actual_qty)} ${frappe.utils.escape_html(
+							r.stock_uom || ""
+						)}</span>
+						</div>`;
+					})
+					.join("");
 				return `
-				<div class="src-bar-row">
-					<div class="src-bar-info">
-						<span class="src-bar-label">${frappe.utils.escape_html(r.item_name || r.item_code)}</span>
-						<span class="src-bar-sub">${frappe.utils.escape_html(r.warehouse || "")}</span>
-					</div>
-					<div class="src-progress-track src-progress-track--thin">
-						<div class="src-progress-fill" style="width:${pct}%;background:var(--blue-600)"></div>
-					</div>
-					<span class="src-bar-value">${frappe.utils.escape_html(r.actual_qty)} ${frappe.utils.escape_html(
-					r.stock_uom || ""
-				)}</span>
+				<div class="src-stock-site">
+					<div class="src-building-name">${frappe.utils.escape_html(site)} <span class="src-building-count">${
+					site_rows.length
+				} items</span></div>
+					${bars}
 				</div>`;
 			})
 			.join("");
-		$target.html(body);
+		$target.html(html);
 	}
 
 	// ── Purchase summary ─────────────────────────────────────────────────
@@ -527,7 +579,12 @@ class SRCDashboard {
 			colors: [CHART_COLORS.blue, CHART_COLORS.green, CHART_COLORS.orange],
 			axisOptions: { xAxisMode: "tick", shortenYAxisNumbers: 1 },
 			barOptions: { spaceRatio: 0.4 },
+			tooltipOptions: { formatTooltipY: (d) => this._format_number(d) },
 		});
+	}
+
+	_format_number(v) {
+		return (v || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 	}
 
 	_render_aging(rows) {
@@ -664,6 +721,13 @@ class SRCDashboard {
 			.src-table tbody tr:nth-child(even) { background: var(--subtle-fg); }
 			.src-num { text-align: right; font-variant-numeric: tabular-nums; }
 			.src-empty { color: var(--text-muted); font-size: 0.9rem; padding: 8px 0; }
+
+			/* Stock search + site groups */
+			.src-search-row { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border-color); border-radius: 8px; padding: 6px 12px; margin-bottom: 14px; background: var(--control-bg); color: var(--text-muted); }
+			.src-search-row .icon { flex: none; }
+			.src-search-input { flex: 1; border: none; background: transparent; outline: none; font-size: 0.9rem; color: var(--text-color); }
+			.src-stock-site { margin-bottom: 14px; }
+			.src-stock-site:last-child { margin-bottom: 0; }
 
 			/* Bar rows (stock / spend) */
 			.src-bar-row { display: grid; grid-template-columns: 1fr; gap: 5px; padding: 10px 0; border-bottom: 1px solid var(--border-color); }
