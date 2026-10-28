@@ -1,0 +1,47 @@
+{
+ "actions": [],
+ "creation": "2026-10-25 12:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "floors",
+  "floor_plan_image",
+  "plan_hotspots"
+ ],
+ "fields": [
+  {
+   "description": "Floor names this plan applies to, one per line (e.g. Ground Floor). Floors not listed here use the building's default plan.",
+   "fieldname": "floors",
+   "fieldtype": "Small Text",
+   "in_list_view": 1,
+   "label": "Floors",
+   "reqd": 1
+  },
+  {
+   "fieldname": "floor_plan_image",
+   "fieldtype": "Attach Image",
+   "in_list_view": 1,
+   "label": "Floor Plan Image"
+  },
+  {
+   "description": "Written by the Map flats tool: {\"1\": [x, y, w, h], ...} in % of the plan image.",
+   "fieldname": "plan_hotspots",
+   "fieldtype": "Code",
+   "label": "Plan Hotspots",
+   "options": "JSON"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-10-25 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Sr Construction",
+ "name": "Building Showcase Floor",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

@@ -1,0 +1,94 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "field:building",
+ "creation": "2026-10-25 10:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "building",
+  "column_break_1",
+  "building_image",
+  "floor_plan_image",
+  "section_break_2",
+  "plan_hotspots",
+  "brochure",
+  "floor_plans"
+ ],
+ "fields": [
+  {
+   "description": "Name of the Building record this media belongs to.",
+   "fieldname": "building",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Building",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Real photo or render of the building. Shown on the site card, the hero and the Elevation view.",
+   "fieldname": "building_image",
+   "fieldtype": "Attach Image",
+   "label": "Building Image"
+  },
+  {
+   "description": "Plan used for every floor that has no floor-specific plan below. Flats are mapped onto it with Map flats.",
+   "fieldname": "floor_plan_image",
+   "fieldtype": "Attach Image",
+   "label": "Default Floor Plan Image"
+  },
+  {
+   "fieldname": "section_break_2",
+   "fieldtype": "Section Break"
+  },
+  {
+   "description": "Written by the Map flats tool: {\"1\": [x, y, w, h], ...} in % of the plan image, keyed by flat position on the floor.",
+   "fieldname": "plan_hotspots",
+   "fieldtype": "Code",
+   "label": "Plan Hotspots",
+   "options": "JSON"
+  },
+  {
+   "fieldname": "brochure",
+   "fieldtype": "Attach",
+   "label": "Brochure"
+  },
+  {
+   "description": "Floors whose layout differs from the default plan above (each with its own plan and flat mapping).",
+   "fieldname": "floor_plans",
+   "fieldtype": "Table",
+   "label": "Floor-specific plans",
+   "options": "Building Showcase Floor"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-25 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Sr Construction",
+ "name": "Building Showcase",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

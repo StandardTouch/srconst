@@ -1,0 +1,109 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-10-22 22:30:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "block_name",
+  "block_prefix",
+  "site",
+  "total_floors",
+  "units_per_floor",
+  "column_break_3d",
+  "pos_x",
+  "pos_z",
+  "tower_theme",
+  "elevation_render"
+ ],
+ "fields": [
+  {
+   "fieldname": "block_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Block / Tower Name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "block_prefix",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Tower Code / Prefix (e.g. A, B, C)",
+   "reqd": 1
+  },
+  {
+   "fieldname": "site",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Property Site",
+   "options": "Property Site",
+   "reqd": 1
+  },
+  {
+   "default": "14",
+   "fieldname": "total_floors",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Total Floors"
+  },
+  {
+   "default": "8",
+   "fieldname": "units_per_floor",
+   "fieldtype": "Int",
+   "label": "Flats / Units per Floor"
+  },
+  {
+   "fieldname": "column_break_3d",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "pos_x",
+   "fieldtype": "Float",
+   "label": "3D Canvas Position X"
+  },
+  {
+   "default": "0",
+   "fieldname": "pos_z",
+   "fieldtype": "Float",
+   "label": "3D Canvas Position Z"
+  },
+  {
+   "default": "#38bdf8",
+   "fieldname": "tower_theme",
+   "fieldtype": "Color",
+   "label": "Tower Accent Color"
+  },
+  {
+   "fieldname": "elevation_render",
+   "fieldtype": "Attach Image",
+   "label": "Tower Elevation Render"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-10-22 22:30:00.000000",
+ "modified_by": "Administrator",
+ "module": "Sr Construction",
+ "name": "Property Block",
+ "naming_rule": "By fieldname",
+ "autoname": "field:block_name",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1
+}

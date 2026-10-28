@@ -242,3 +242,21 @@ app_license = "mit"
 # 	"Logging DocType Name": 30  # days to retain logs
 # }
 
+# Site Showcase: make sure the production roles can open the page after every migrate
+after_migrate = ["srconst.showcase_setup.after_migrate"]
+
+# Site Showcase: tell open pages when the inventory changes, wherever the change came from
+doc_events = {
+	"Flat": {
+		"validate": "srconst.flat_showcase.validate_flat",
+		"after_insert": "srconst.showcase_sync.flat_changed",
+		"on_update": "srconst.showcase_sync.flat_changed",
+		"on_trash": "srconst.showcase_sync.flat_changed",
+	},
+	"Building": {"after_insert": "srconst.showcase_sync.building_changed", "on_update": "srconst.showcase_sync.building_changed", "on_trash": "srconst.showcase_sync.building_changed"},
+	"Flat Booking": {"on_submit": "srconst.showcase_sync.booking_changed", "on_cancel": "srconst.showcase_sync.booking_changed", "on_update_after_submit": "srconst.showcase_sync.booking_changed"},
+	"Flat Booking Cancellation": {"on_submit": "srconst.showcase_sync.booking_changed"},
+}
+
+# The "Showcase (web view)" section of the Flat form: a button to open the flat on the page
+doctype_js = {"Flat": "public/js/flat_showcase.js"}

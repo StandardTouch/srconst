@@ -1,0 +1,175 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-10-22 22:30:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "flat_number",
+  "block",
+  "site",
+  "floor_number",
+  "unit_index",
+  "status",
+  "column_break_flat",
+  "flat_type",
+  "facing",
+  "carpet_area",
+  "super_builtup_area",
+  "base_price",
+  "section_break_visuals",
+  "inside_3d_render",
+  "living_dining_dim",
+  "master_bedroom_dim",
+  "bedroom2_dim",
+  "kitchen_dim",
+  "balcony_dim",
+  "utility_dim"
+ ],
+ "fields": [
+  {
+   "fieldname": "flat_number",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Flat / Unit Number",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "block",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Block / Tower",
+   "options": "Property Block",
+   "reqd": 1
+  },
+  {
+   "fieldname": "site",
+   "fieldtype": "Link",
+   "label": "Property Site",
+   "options": "Property Site"
+  },
+  {
+   "fieldname": "floor_number",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Floor Number",
+   "reqd": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "unit_index",
+   "fieldtype": "Int",
+   "label": "Unit Index on Floor (1-8)"
+  },
+  {
+   "default": "Available",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Availability Status",
+   "options": "Available\nIn Process\nSold"
+  },
+  {
+   "fieldname": "column_break_flat",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "flat_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Flat Type",
+   "options": "2BHK\n3BHK Royal\n3BHK Luxury\n3BHK Executive\n3BHK Grand\n4BHK Penthouse"
+  },
+  {
+   "fieldname": "facing",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Facing Direction",
+   "options": "East\nWest\nNorth\nSouth\nNorth-East\nNorth-West\nSouth-East\nSouth-West"
+  },
+  {
+   "fieldname": "carpet_area",
+   "fieldtype": "Float",
+   "label": "RERA Carpet Area (sqft)"
+  },
+  {
+   "fieldname": "super_builtup_area",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Super Built-up Area (sqft)"
+  },
+  {
+   "fieldname": "base_price",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Base Price (₹)"
+  },
+  {
+   "fieldname": "section_break_visuals",
+   "fieldtype": "Section Break",
+   "label": "3D Inside Cutaway & Dimensions"
+  },
+  {
+   "fieldname": "inside_3d_render",
+   "fieldtype": "Attach Image",
+   "label": "3D Inside Cutaway Render"
+  },
+  {
+   "fieldname": "living_dining_dim",
+   "fieldtype": "Data",
+   "label": "Living / Dining Dimensions"
+  },
+  {
+   "fieldname": "master_bedroom_dim",
+   "fieldtype": "Data",
+   "label": "Master Bedroom Dimensions"
+  },
+  {
+   "fieldname": "bedroom2_dim",
+   "fieldtype": "Data",
+   "label": "Bedroom 2 Dimensions"
+  },
+  {
+   "fieldname": "kitchen_dim",
+   "fieldtype": "Data",
+   "label": "Kitchen Dimensions"
+  },
+  {
+   "fieldname": "balcony_dim",
+   "fieldtype": "Data",
+   "label": "Balcony Dimensions"
+  },
+  {
+   "fieldname": "utility_dim",
+   "fieldtype": "Data",
+   "label": "Utility Dimensions"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-10-22 22:30:00.000000",
+ "modified_by": "Administrator",
+ "module": "Sr Construction",
+ "name": "Property Flat",
+ "naming_rule": "By fieldname",
+ "autoname": "field:flat_number",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1
+}
