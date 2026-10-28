@@ -1030,8 +1030,8 @@ def cancel_booking(booking, reason, cancellation_date=None):
 	"""Create and submit a Flat Booking Cancellation. Its server script reverses payments, invoice and booking, and frees the flat."""
 	frappe.has_permission("Flat Booking Cancellation", "create", throw=True)
 	reason = (reason or "").strip()
-	if len(reason) < 5:
-		frappe.throw(_("Please give a reason for the cancellation"))
+	if len(reason) < 3:
+		frappe.throw(_("Please give a reason for the cancellation (at least 3 characters)"))
 
 	doc = None
 	flat = None

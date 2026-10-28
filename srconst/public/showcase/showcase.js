@@ -1259,7 +1259,7 @@
 
 		async cxConfirm(btn) {
 			const reason = this.q("#cx-reason").value.trim(), date = this.q("#cx-date").value;
-			if (reason.length < 5) return frappe.show_alert({ message: __("Please give a reason"), indicator: "orange" });
+			if (reason.length < 3) return frappe.show_alert({ message: __("Please give a reason (at least 3 characters)"), indicator: "orange" });
 			if (!this.q("#cx-ok").checked) return frappe.show_alert({ message: __("Tick the box to confirm"), indicator: "orange" });
 			const info = this.cx.info, u = this.cx.unit;
 			this.busy(btn, true);
