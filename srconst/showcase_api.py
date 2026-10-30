@@ -35,11 +35,7 @@ STATUS_LABEL = {"Empty": "Available", "In Process": "In Process", "Sold": "Sold"
 # Cost centers that are not construction sites. Override with `showcase_hidden_cost_centers: [...]` in site_config.json.
 # A cost center that has Buildings is always shown, whatever its name.
 HIDDEN_COST_CENTERS = ("main", "admin and overhead", "head office", "project alpha", "project beta", "project gamma")
-# Flat numbers read <block letter><floor code><n> (BFFF4 = block B, Fourth Floor, no. 4); series match the Flat server script.
-FLOOR_CODE = {
-	"Ground Floor": "GF", "First Floor": "FF", "Second Floor": "SF", "Third Floor": "TF", "Fourth Floor": "FFF",
-	"Fifth Floor": "FiF", "Sixth Floor": "SiF", "Seventh Floor": "SeF", "Eighth Floor": "EF", "Ninth Floor": "NF", "Tenth Floor": "TeF",
-}
+# Flat numbers read <block letter><floor number><n> (B44 = block B, fourth floor, flat 4; ground floor is 0); series match the Flat server script.
 FLOOR_SERIES = {
 	"Ground Floor": "GF-.####", "First Floor": "FF-.####", "Second Floor": "SF-.####", "Third Floor": "TF-.####",
 	"Fourth Floor": "FoF-.####", "Fifth Floor": "FiF-.####", "Sixth Floor": "SiF-.####", "Seventh Floor": "SeF-.####",
@@ -162,6 +158,7 @@ def _erp_summaries():
 				"id": s["id"],
 				"kind": "erp",
 				"name": s["name"],
+				"cost_center": s["cost_center"],
 				"developer": s["company"],
 				"location": None,
 				"description": None,
@@ -187,7 +184,7 @@ def _natural(s):
 	return [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", s or "")]
 
 
-SHOWCASE_FLAT_FIELDS = ["showcase_plan_position", "showcase_inside_image", "showcase_description", "showcase_highlights"]
+SHOWCASE_FLAT_FIELDS = ["carpet_area_sqft", "showcase_plan_position", "showcase_inside_image", "showcase_description", "showcase_highlights"]
 
 
 def _flat_fields():
@@ -298,6 +295,7 @@ def _erp_site(site_id):
 						"type": f.flat_type or "",
 						"facing": f.facing or "",
 						"area": flt(f.area_sqft) or None,
+						"carpetArea": flt(f.get("carpet_area_sqft")) or None,
 						"price": flt(f.base_price) or None,
 						"status": STATUS_LABEL.get(f.status, f.status),
 						"rawStatus": f.status,
@@ -346,6 +344,26 @@ def _erp_site(site_id):
 
 
 _IMAGE_EXT = (".png", ".jpg", ".jpeg", ".webp")
+
+
+def _pdf_page_image(file_url, building, kind):
+	"""First page of an uploaded PDF rendered as a WebP (cached by file), so a PDF can be used as a display image or floor plan."""
+	if not (file_url or "").lower().split("?")[0].endswith(".pdf"):
+		return file_url
+	slug = re.sub(r"[^a-z0-9]+", "-", building.lower()).strip("-") or "building"
+	name = f"{kind}-{slug}-{hashlib.sha1(file_url.encode()).hexdigest()[:8]}.webp"
+	out = os.path.join(_cache_dir(), name)
+	if not os.path.exists(out):
+		import pypdfium2
+
+		pdf = pypdfium2.PdfDocument(frappe.get_doc("File", {"file_url": file_url}).get_full_path())
+		try:
+			page = pdf[0]
+			scale = min(4.0, 3000 / max(page.get_width(), page.get_height(), 1))  # about 3000 px on the long side
+			page.render(scale=scale).to_pil().convert("RGB").save(out, "WEBP", quality=90, method=4)
+		finally:
+			pdf.close()
+	return f"/files/{CACHE_DIR}/{name}"
 
 
 def _plan_from_brochure(url, building):
@@ -434,6 +452,130 @@ def site_options():
 	}
 
 
+@frappe.whitelist(methods=["POST"])
+def delete_site(cost_center):
+	"""Delete a site: its Flats, Buildings and the leaf Cost Center. Refused (and rolled back) if anything else links to them, e.g. a booking."""
+	_require_create_site()
+	cc = frappe.db.get_value("Cost Center", cost_center, ["name", "is_group"], as_dict=True)
+	if not cc or cc.is_group:
+		frappe.throw(_("Choose a site (leaf cost center)"))
+	for b in frappe.get_all("Building", filters={"cost_center": cc.name}, pluck="name"):
+		for f in frappe.get_all("Flat", filters={"building": b}, pluck="name", limit_page_length=0):
+			frappe.delete_doc("Flat", f)
+		frappe.delete_doc("Building", b)
+	frappe.delete_doc("Cost Center", cc.name)
+	return {"success": True}
+
+
+IMPORT_COLUMNS = {
+	"block": ("block", "building"), "floor": ("floor",), "flat_number": ("flat no", "flat no.", "flat number", "flat"),
+	"flat_type": ("type", "flat type"), "area": ("total area", "total area sq.ft.", "total area sqft", "area", "super built-up"),
+	"carpet": ("carpet area", "carpet area sq.ft.", "carpet area sqft", "carpet"), "facing": ("facing",), "price": ("price", "base price"),
+}
+
+
+def _read_sheet(file_url):
+	"""Rows of a CSV or XLSX attachment as a list of lists."""
+	file = frappe.get_doc("File", {"file_url": file_url})
+	content = file.get_content()
+	if (file.file_name or "").lower().endswith((".xlsx", ".xlsm")):
+		from frappe.utils.xlsxutils import read_xlsx_file_from_attached_file
+
+		return read_xlsx_file_from_attached_file(fcontent=content)
+	from frappe.utils.csvutils import read_csv_content
+
+	return read_csv_content(content if isinstance(content, str) else content.decode("utf-8-sig"))
+
+
+@frappe.whitelist(methods=["POST"])
+def import_flats(cost_center, file_url, default_price=0):
+	"""Create or update Flats from a sheet with one row per flat: Block, Floor, Flat No., Type, Total Area, Carpet Area, Facing, Price.
+
+	Rows match an existing Flat by building + flat number and update its type, areas, facing and (if given) price. New flats need a
+	price, taken from the Price column or `default_price` (the owner sets prices, not the area). A block with no Building yet gets one.
+	"""
+	_require_create_site()
+	cc = frappe.db.get_value("Cost Center", cost_center, ["name", "company", "is_group", "disabled", "cost_center_name"], as_dict=True)
+	if not cc or cc.is_group or cc.disabled:
+		frappe.throw(_("Choose a site (leaf cost center)"))
+	rows = [r for r in _read_sheet(file_url) if any(str(c or "").strip() for c in r)]
+	if len(rows) < 2:
+		frappe.throw(_("The sheet needs a header row and at least one flat"))
+	header = [str(c or "").strip().lower() for c in rows[0]]
+	col = {k: next((header.index(a) for a in names if a in header), None) for k, names in IMPORT_COLUMNS.items()}
+	for k in ("block", "floor", "flat_number", "area"):
+		if col[k] is None:
+			frappe.throw(_("Missing column: {0}").format(IMPORT_COLUMNS[k][0].title()))
+	if len(rows) - 1 > MAX_FLATS_PER_CALL:
+		frappe.throw(_("Import at most {0} flats at a time").format(MAX_FLATS_PER_CALL))
+
+	floors_all, types, facings = _floor_order(), _select_options("Flat", "flat_type"), _select_options("Flat", "facing")
+	block_options = _select_options("Flat", "block")
+	series = (_select_options("Building", "naming_series") or ["BLD-.YYYY.-.####"])[0]
+	label = _tidy(cc.cost_center_name or cc.name)
+	has_position, has_carpet = frappe.get_meta("Flat").has_field("showcase_plan_position"), frappe.get_meta("Flat").has_field("carpet_area_sqft")
+	default_price = flt(default_price)
+
+	def cell(r, k):
+		i = col[k]
+		return str(r[i]).strip() if i is not None and i < len(r) and r[i] is not None else ""
+
+	buildings = {_block_letter(b.building_name): b.name for b in frappe.get_all("Building", filters={"cost_center": cc.name}, fields=["name", "building_name"])}
+	made = {"created": 0, "updated": 0, "buildings": []}
+	frappe.db.savepoint("showcase_import")
+	try:
+		for n, r in enumerate(rows[1:], start=2):
+			letter, number = cell(r, "block").upper().replace("BLOCK", "").strip() or None, cell(r, "flat_number")
+			floor = cell(r, "floor")
+			floor = next((f for f in floors_all if f.lower() in (floor.lower(), floor.lower() + " floor")), None)
+			area = flt(cell(r, "area"))
+			if not (letter and number and floor and area > 0):
+				frappe.throw(_("Row {0}: block, floor, flat number and total area are required (floor must be one of {1})").format(n, ", ".join(floors_all)))
+			if letter not in buildings:
+				b = frappe.get_doc({"doctype": "Building", "naming_series": series, "building_name": f"Block {letter} - {label}" if frappe.db.exists("Building", f"Block {letter}") else f"Block {letter}",
+					"project": label, "company": cc.company, "cost_center": cc.name, "total_floors": 1, "total_flats": 0}).insert(ignore_permissions=True)
+				buildings[letter] = b.name
+				made["buildings"].append(b.name)
+			ftype, facing = cell(r, "flat_type"), cell(r, "facing")
+			if ftype and ftype not in types:
+				frappe.throw(_("Row {0}: unknown type {1}").format(n, ftype))
+			facing = next((f for f in facings if f and f.lower().replace("-", " ") == facing.lower().replace("-", " ")), None) if facing else None
+			values = {"area_sqft": area, "flat_type": ftype or None, "facing": facing}
+			if has_carpet and cell(r, "carpet"):
+				values["carpet_area_sqft"] = flt(cell(r, "carpet"))
+			price = flt(cell(r, "price"))
+			existing = frappe.db.get_value("Flat", {"building": buildings[letter], "flat_number": number})
+			if existing:
+				if price:
+					values["base_price"] = price
+				frappe.db.set_value("Flat", existing, values)
+				made["updated"] += 1
+				continue
+			if not (price or default_price):
+				frappe.throw(_("Row {0}: {1} is new and needs a price (Price column or the default price)").format(n, number))
+			digits = re.findall(r"\d+", number)
+			frappe.get_doc(
+				{
+					"doctype": "Flat", "naming_series": FLOOR_SERIES.get(floor, "GF-.####"), "flat_number": number, "block": letter if letter in block_options else None,
+					"building": buildings[letter], "floor": floor, "status": "Empty", "company": cc.company, "cost_center": cc.name, "base_price": price or default_price,
+					**values, **({"showcase_plan_position": cint(digits[0][len(str(floors_all.index(floor))):] or 0) or None} if has_position and digits else {}),
+				}
+			).insert(ignore_permissions=True)
+			made["created"] += 1
+		for b in set(buildings.values()):
+			flats = frappe.get_all("Flat", filters={"building": b}, fields=["floor"])
+			frappe.db.set_value("Building", b, {"total_flats": len(flats), "total_floors": len({f.floor for f in flats}) or 1})
+	except Exception:
+		frappe.db.rollback(save_point="showcase_import")
+		raise
+	return {"success": True, **made}
+
+
+def flat_number(letter, floor_index, n):
+	"""<block letter><floor number, ground = 0><flat number>: B02 = block B, ground floor, flat 2; B110 = block B, first floor, flat 10"""
+	return f"{letter}{floor_index}{n}"
+
+
 def _block_letter(building_name):
 	"""'BLOCK A' -> 'A', 'Tower 2' -> '2', 'Pride' -> 'P'"""
 	words = re.findall(r"[A-Za-z0-9]+", building_name or "")
@@ -448,7 +590,8 @@ def create_site_flats(cost_center=None, project=None, blocks=None, building_imag
 	"""Create Buildings and their Flats (status Empty) for a site, the same records the ERPNext forms create.
 	Allowed for CREATE_SITE_ROLES (System Manager, SRC MD).
 
-	blocks: [{building_name, floors, flats_per_floor, flat_type, area_sqft, facing, base_price}, ...]
+	blocks: [{building_name, floors, flats_per_floor, flat_type, base_price, flats: [{flat_type, area_sqft, carpet_area_sqft, facing, base_price}, ...]}, ...]
+	flats[n] describes flat n+1 on every floor; flat_type and base_price on the block are the defaults.
 	"""
 	# The role check above is the permission rule for this action. System Manager has no create right on the custom
 	# Building / Flat doctypes, so the records are inserted with ignore_permissions after that check.
@@ -489,8 +632,9 @@ def create_site_flats(cost_center=None, project=None, blocks=None, building_imag
 	clean, names, total = [], set(), 0
 	for i, b in enumerate(blocks, start=1):
 		name = (b.get("building_name") or "").strip()
-		floors, per, area, price = cint(b.get("floors")), cint(b.get("flats_per_floor")), flt(b.get("area_sqft")), flt(b.get("base_price"))
-		ftype, facing = (b.get("flat_type") or "").strip(), (b.get("facing") or "").strip()
+		floors, per, price = cint(b.get("floors")), cint(b.get("flats_per_floor")), flt(b.get("base_price"))
+		ftype = (b.get("flat_type") or "").strip()
+		template = b.get("flats") or []  # one entry per flat position, repeated on every floor
 		if not name:
 			frappe.throw(_("Block {0}: enter a building name").format(i))
 		entered = name
@@ -503,18 +647,24 @@ def create_site_flats(cost_center=None, project=None, blocks=None, building_imag
 			frappe.throw(_("{0}: floors must be between 1 and {1}").format(name, len(floors_all)))
 		if not 1 <= per <= 20:
 			frappe.throw(_("{0}: flats per floor must be between 1 and 20").format(name))
-		if area <= 0 or price <= 0:
-			frappe.throw(_("{0}: area and base price must be greater than zero").format(name))
-		if ftype and ftype not in types:
-			frappe.throw(_("{0}: unknown flat type {1}").format(name, ftype))
-		if facing and facing not in facings:
-			frappe.throw(_("{0}: unknown facing {1}").format(name, facing))
+		layout = []
+		for n in range(per):
+			t = template[n] if n < len(template) and isinstance(template[n], dict) else {}
+			t_type, t_facing = (t.get("flat_type") or ftype).strip(), (t.get("facing") or "").strip()
+			t_area, t_carpet, t_price = flt(t.get("area_sqft") or b.get("area_sqft")), flt(t.get("carpet_area_sqft")), flt(t.get("base_price")) or price
+			if t_area <= 0 or t_price <= 0:
+				frappe.throw(_("{0}, flat {1}: total area and price must be greater than zero").format(name, n + 1))
+			if t_type and t_type not in types:
+				frappe.throw(_("{0}, flat {1}: unknown flat type {2}").format(name, n + 1, t_type))
+			if t_facing and t_facing not in facings:
+				frappe.throw(_("{0}, flat {1}: unknown facing {2}").format(name, n + 1, t_facing))
+			layout.append((t_type, t_area, t_carpet, t_price, t_facing))
 		total += floors * per
-		clean.append((name, floors, per, area, price, ftype, facing, entered))
+		clean.append((name, floors, per, layout, entered))
 	if total > MAX_FLATS_PER_CALL:
 		frappe.throw(_("That would create {0} flats. Create at most {1} at a time.").format(total, MAX_FLATS_PER_CALL))
 
-	has_position = frappe.get_meta("Flat").has_field("showcase_plan_position")
+	has_position, has_carpet = frappe.get_meta("Flat").has_field("showcase_plan_position"), frappe.get_meta("Flat").has_field("carpet_area_sqft")
 	frappe.db.savepoint("showcase_site")
 	created = []
 	try:
@@ -522,7 +672,7 @@ def create_site_flats(cost_center=None, project=None, blocks=None, building_imag
 			made = frappe.get_doc(new_cc_args).insert(ignore_permissions=True)
 			cc.name = made.name
 			cost_center = made.name
-		for name, floors, per, area, price, ftype, facing, entered in clean:
+		for name, floors, per, layout, entered in clean:
 			building = frappe.get_doc(
 				{
 					"doctype": "Building", "naming_series": series, "building_name": name, "project": project, "company": cc.company,
@@ -531,14 +681,15 @@ def create_site_flats(cost_center=None, project=None, blocks=None, building_imag
 			).insert(ignore_permissions=True)
 			letter = _block_letter(entered)
 			for floor in floors_all[:floors]:
-				code = FLOOR_CODE.get(floor, floor[:2].upper())
 				for n in range(1, per + 1):
+					ftype, area, carpet, price, facing = layout[n - 1]
 					frappe.get_doc(
 						{
-							"doctype": "Flat", "naming_series": FLOOR_SERIES.get(floor, "GF-.####"), "flat_number": f"{letter}{code}{n}",
+							"doctype": "Flat", "naming_series": FLOOR_SERIES.get(floor, "GF-.####"), "flat_number": flat_number(letter, floors_all.index(floor), n),
 							"block": letter if letter in block_options else None, "building": building.name, "floor": floor, "status": "Empty",
 							"company": cc.company, "cost_center": cc.name, "area_sqft": area, "base_price": price,
 							"flat_type": ftype or None, "facing": facing or None, **({"showcase_plan_position": n} if has_position else {}),
+							**({"carpet_area_sqft": carpet} if carpet and has_carpet else {}),
 						}
 					).insert(ignore_permissions=True)
 			created.append({"building": building.name, "flats": floors * per, "renamed": building.name != entered})
@@ -605,6 +756,8 @@ def _drop_derived_plans(doc):
 
 
 def _apply_media(doc, building_image=None, floor_plan_image=None, brochure=None, extract_plan=0, floors=None):
+	building_image = _pdf_page_image(building_image, doc.building, "display")
+	floor_plan_image = _pdf_page_image(floor_plan_image, doc.building, "plan")
 	if building_image:
 		doc.building_image = building_image
 	if brochure:

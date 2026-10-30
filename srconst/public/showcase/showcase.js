@@ -176,6 +176,7 @@
 			const add = this.perms.create_site ? `<button class="srs-card add" data-act="addsite"><div class="plus">+</div><h3>${__("Add a site")}</h3><div class="loc">${__("Blocks, floors and flats")}</div></button>` : "";
 			this.q(".srs-cards").innerHTML = (list.length ? list.map((s) => `
 				<button class="srs-card ${s.empty ? "empty" : ""}" data-site="${esc(s.id)}" data-key="${esc((s.name + " " + (s.location || "")).toLowerCase())}">
+					${this.perms.create_site && s.cost_center ? `<span class="del" role="button" title="${__("Delete site")}" data-act="delsite" data-cc="${esc(s.cost_center)}" data-name="${esc(s.name)}">🗑</span>` : ""}
 					<div class="img" style="${s.image ? `background-image:url('${esc(s.image)}')` : ""}"></div>
 					<div class="shade"></div>
 					<div class="meta">
@@ -186,6 +187,17 @@
 							: `<div class="nums"><span><b>${s.stats.blocks}</b>${s.stats.blocks === 1 ? __("block") : __("blocks")}</span><span><b>${s.stats.total}</b>${__("residences")}</span><span><b>${s.stats.available}</b>${__("available")}</span></div>`}
 					</div>
 				</button>`).join("") : `<div class="srs-empty" style="grid-column:1/-1;padding:80px 0">${__("No sites found.")}</div>`) + add;
+		}
+
+		deleteSite(cc, name) {
+			frappe.confirm(__("Delete {0}? This permanently removes its cost center, buildings and flats. It is refused if any flat has a booking.", [name]), async () => {
+				try {
+					await call("delete_site", { cost_center: cc });
+					frappe.show_alert({ message: __("{0} deleted", [name]), indicator: "green" });
+					delete this.cache[cc];
+					await this.load();
+				} catch (e) { /* Frappe has shown the server's message */ }
+			});
 		}
 
 		filterCards(text) {
@@ -400,7 +412,7 @@
 			const slabs = levels.map((l, i) => {
 				const st = this.levelStats(l);
 				const bar = `<i class="bar" style="background:${this.barGradient(st)}"></i>`;
-				const num = `<span class="num" style="font-size:${Math.max(7, Math.min(11, H * 0.55))}px">${esc(l.short != null ? l.short : String(l.level).padStart(2, "0"))}</span>`;
+				const num = `<span class="num" style="font-size:${Math.max(12, Math.min(20, H * 0.9))}px">${esc(l.short != null ? l.short : String(l.level).padStart(2, "0"))}</span>`;
 				return `<div class="srs-slab" data-level="${l.level}" style="width:${W}px;height:${H}px">
 					${box(W, D, H, { front: num, back: num, side: bar, bgF: win(W, H, 12, l.level * 7 + 1, 0.3), bgS: win(D, H, 8, l.level * 7 + 2, 0.22) })}
 					${ledge}<div class="srs-part flip" style="width:${W}px;height:${H}px;transform:rotateY(180deg)">${ledge}</div>
@@ -793,15 +805,23 @@
 			return `<img src="${esc(src)}" alt="">`;
 		}
 
+		sheetRows(u) {
+			const na = __("Not updated");
+			return [
+				[__("Flat no."), u.name],
+				[__("Block"), this.block.name],
+				[__("Floor"), this.level.label],
+				[__("Type"), u.type || na],
+				[__("Total area"), u.area ? u.area + " sq ft" : na],
+				[__("Carpet area"), u.carpetArea ? u.carpetArea + " sq ft" : na],
+				[__("Facing"), u.facing || na],
+				...Object.entries(u.dims || {}).map(([k, v]) => [k.replace(/([A-Z])/g, " $1").replace(/^./, (ch) => ch.toUpperCase()), v]),
+			];
+		}
+
 		renderSheet() {
 			const u = this.level.units[this.unit], s = this.site;
-			const rows = [
-				[__("Type"), u.type],
-				u.area ? [__("Super built-up"), u.area + " sq ft"] : null,
-				u.carpetArea ? [__("Carpet area"), u.carpetArea + " sq ft"] : null,
-				u.facing ? [__("Facing"), u.facing] : null,
-				...Object.entries(u.dims || {}).map(([k, v]) => [k.replace(/([A-Z])/g, " $1").replace(/^./, (ch) => ch.toUpperCase()), v]),
-			].filter(Boolean);
+			const rows = this.sheetRows(u);
 			const tabs = [["3d", __("3D View"), !!u.render3d], ["2d", __("2D Plan"), !!u.plan2d], ["photos", __("Photos") + (u.photos && u.photos.length > 1 ? ` (${u.photos.length})` : ""), !!(u.photos && u.photos.length)]].filter((x) => x[2]);
 			this.q(".srs-sheet").innerHTML = `
 				<button class="x" data-act="close">✕</button>
@@ -876,8 +896,7 @@
 		printSheet() {
 			const u = this.level.units[this.unit], s = this.site;
 			const abs = (p) => (p ? new URL(p, location.origin).href : "");
-			const rows = [[__("Type"), u.type], u.area ? [__("Super built-up"), u.area + " sq ft"] : null, u.carpetArea ? [__("Carpet area"), u.carpetArea + " sq ft"] : null, u.facing ? [__("Facing"), u.facing] : null,
-				...Object.entries(u.dims || {}).map(([k, v]) => [k.replace(/([A-Z])/g, " $1"), v])].filter(Boolean);
+			const rows = this.sheetRows(u);
 			const w = window.open("", "_blank");
 			if (!w) { frappe.show_alert({ message: __("Allow pop-ups to print the brochure page"), indicator: "orange" }); return; }
 			w.document.write(`<!doctype html><title>${esc(s.name)} — ${esc(u.name)}</title><style>
@@ -905,12 +924,12 @@
 				title: __("Showcase media · {0}", [blk.name]),
 				fields: [
 					{ fieldtype: "HTML", options: `<p class="text-muted" style="margin:0 0 8px">${__("Display image and brochure are what clients see on the site card and in the Brochure button. Upload a new file to replace the current one. A new brochure replaces the plan that was taken from the old one, so crop and map the flats again.")}${blk.brochure ? ` <a href="${esc(blk.brochure)}" target="_blank" rel="noopener">${__("Current brochure")} ↗</a>` : ""}</p>` },
-					{ fieldname: "building_image", fieldtype: "Attach Image", label: __("Display image (real building photo)") },
+					{ fieldname: "building_image", fieldtype: "Attach", label: __("Display image (photo or PDF)") },
 					{ fieldname: "brochure", fieldtype: "Attach", label: __("Brochure (PDF or image)") },
 					...(many ? [{ fieldname: "apply_to_site", fieldtype: "Check", label: __("Use this display image and brochure for every building of {0}", [this.site.name]), default: 1 }] : []),
 					{ fieldtype: "Section Break", label: __("Floor plan") },
 					{ fieldtype: "HTML", options: `<p class="text-muted" style="margin:0 0 8px">${__("A floor plan is the top-down drawing of one floor with all its flats. Flat views are cut from it, after you map the flats with Map flats. If floors are laid out differently (mirrored, rotated, different flats), upload each layout separately and tick only the floors it applies to.")}</p>` },
-					{ fieldname: "floor_plan_image", fieldtype: "Attach Image", label: __("Floor plan image") },
+					{ fieldname: "floor_plan_image", fieldtype: "Attach", label: __("Floor plan (image or PDF, first page is used)") },
 					{ fieldname: "floors", fieldtype: "MultiCheck", label: __("This plan applies to"), columns: 2, options: floors.map((f) => ({ label: f, value: f, checked: 1 })), depends_on: "eval:doc.floor_plan_image || (doc.brochure && doc.extract_plan)" },
 					{ fieldname: "extract_plan", fieldtype: "Check", label: __("Take the floor plan from the brochure"), depends_on: "eval:doc.brochure && !doc.floor_plan_image" },
 				],
@@ -991,7 +1010,7 @@
 		async openAddSite(cc) {
 			let o;
 			try { o = await call("site_options"); } catch (e) { return; }
-			const blank = () => ({ building_name: "", floors: 5, flats_per_floor: 4, flat_type: o.flat_types.includes("2BHK") ? "2BHK" : "", area_sqft: "", facing: "", base_price: "" });
+			const blank = () => ({ building_name: "", floors: 5, flats_per_floor: 8, flat_type: o.flat_types.includes("2BHK") ? "2BHK" : "", base_price: "", flats: [] });
 			this.asBind();
 			this.as = { o, cc: cc || (o.cost_centers[0] || {}).name || "__new__", project: "", newName: "", parent: (o.parents.find((p) => p.root) || o.parents[0] || {}).name || "", blocks: [blank()], blank, media: {} };
 			this.renderAddSite();
@@ -1000,15 +1019,26 @@
 		renderAddSite() {
 			const s = this.as, o = s.o, isNew = s.cc === "__new__", cur = o.cost_centers.find((c) => c.name === s.cc) || {};
 			const sel = (opts, v, blankLabel) => `${blankLabel != null ? `<option value="">${blankLabel}</option>` : ""}${opts.map((x) => `<option ${x === v ? "selected" : ""}>${esc(x)}</option>`).join("")}`;
-			const rows = s.blocks.map((b, i) => `<div class="as-row">
+			const rows = s.blocks.map((b, i) => {
+				const per = Math.max(0, Math.min(20, +b.flats_per_floor || 0)), letter = this.asLetter(b.building_name);
+				while (b.flats.length < per) b.flats.push({});
+				const cells = b.flats.slice(0, per).map((f, j) => `<div class="as-flat">
+					<span class="pos">${esc(letter)}<i>0</i>${j + 1}</span>
+					<select class="fld" data-i="${i}" data-j="${j}" data-f="flat_type">${sel(o.flat_types, f.flat_type || "", b.flat_type ? `${b.flat_type} (${__("default")})` : "—")}</select>
+					<input class="fld" data-i="${i}" data-j="${j}" data-f="area_sqft" type="number" min="0" step="any" placeholder="${__("total sq ft")}" value="${esc(f.area_sqft ?? "")}">
+					<input class="fld" data-i="${i}" data-j="${j}" data-f="carpet_area_sqft" type="number" min="0" step="any" placeholder="${__("carpet sq ft")}" value="${esc(f.carpet_area_sqft ?? "")}">
+					<select class="fld" data-i="${i}" data-j="${j}" data-f="facing">${sel(o.facings, f.facing || "", "—")}</select>
+					<input class="fld" data-i="${i}" data-j="${j}" data-f="base_price" type="number" min="0" step="any" placeholder="${b.base_price ? esc(b.base_price) : __("price")}" value="${esc(f.base_price ?? "")}"></div>`).join("");
+				return `<div class="as-block"><div class="as-row">
 				<input class="fld" data-i="${i}" data-k="building_name" placeholder="${__("e.g. BLOCK D")}" value="${esc(b.building_name)}">
 				<input class="fld" data-i="${i}" data-k="floors" type="number" min="1" max="${o.floors.length}" value="${esc(b.floors)}">
 				<input class="fld" data-i="${i}" data-k="flats_per_floor" type="number" min="1" max="20" value="${esc(b.flats_per_floor)}">
 				<select class="fld" data-i="${i}" data-k="flat_type">${sel(o.flat_types, b.flat_type, "—")}</select>
-				<input class="fld" data-i="${i}" data-k="area_sqft" type="number" min="0" step="any" placeholder="sq ft" value="${esc(b.area_sqft)}">
-				<select class="fld" data-i="${i}" data-k="facing">${sel(o.facings, b.facing, "—")}</select>
 				<input class="fld" data-i="${i}" data-k="base_price" type="number" min="0" step="any" placeholder="${__("price")}" value="${esc(b.base_price)}">
-				<button class="x3" data-act="as-delrow" data-i="${i}" title="${__("Remove")}" ${s.blocks.length === 1 ? "disabled" : ""}>✕</button></div>`).join("");
+				<button class="x3" data-act="as-delrow" data-i="${i}" title="${__("Remove")}" ${s.blocks.length === 1 ? "disabled" : ""}>✕</button></div>
+				<div class="as-flats"><div class="as-fhead"><span>${__("Flat")}</span><span>${__("Type")}</span><span>${__("Total area")}</span><span>${__("Carpet area")}</span><span>${__("Facing")}</span><span>${__("Price")}</span></div>${cells}
+				<div class="muted">${__("Flat position on every floor: the same layout repeats on all {0} floors. Leave type or price empty to use the block default.", [b.floors || 0])} <a data-act="as-copyfirst" data-i="${i}">${__("Copy first flat to all")}</a></div></div></div>`;
+			}).join("");
 			this.modal(`<div class="mh"><h3>${__("Add")} <em>${__("site")}</em></h3><button class="x2" data-act="modal-close">✕</button></div>
 				<div class="mb">
 					<div class="two">
@@ -1018,7 +1048,7 @@
 						<label>${__("Cost center group")}<select class="fld" id="as-parent">${o.parents.map((p) => `<option value="${esc(p.name)}" ${p.name === s.parent ? "selected" : ""}>${esc(p.label)}</option>`).join("")}</select></label>` : ""}
 					</div>
 					${cur.buildings && cur.buildings.length ? `<div class="muted">${__("Already has")}: ${esc(cur.buildings.join(", "))}. ${__("New building names must be different; they are unique across all sites.")}</div>` : ""}
-					<div class="as-head"><span>${__("Building")}</span><span>${__("Floors")}</span><span>${__("Flats/floor")}</span><span>${__("Type")}</span><span>${__("Area")}</span><span>${__("Facing")}</span><span>${__("Base price")}</span><span></span></div>
+					<div class="as-head"><span>${__("Building")}</span><span>${__("Floors")}</span><span>${__("Flats/floor")}</span><span>${__("Default type")}</span><span>${__("Default price")}</span><span></span></div>
 					<div class="as-rows">${rows}</div>
 					<div><button class="alt as-add" data-act="as-addrow">+ ${__("Add block")}</button></div>
 					<div class="as-media">
@@ -1026,16 +1056,41 @@
 						<div class="muted">${__("Optional now. You can add or replace them later with Setup, and map the flats on the plan.")}</div>
 					</div>
 					<div class="muted" id="as-sum"></div>
-					<div class="muted">${__("Creates real Building and Flat records in ERPNext (status Empty, ready to book)")}${isNew ? ", " + __("plus a new cost center for the site") : ""}. ${__("Every flat in a block starts with the same type, area and price; edit individual flats in ERPNext afterwards. Building names are unique across sites: if a name is taken, the site name is added after it.")}</div>
+					<div class="muted">${__("Creates real Building and Flat records in ERPNext (status Empty, ready to book)")}${isNew ? ", " + __("plus a new cost center for the site") : ""}. ${__("Fill in each flat position\u2019s own type, areas, facing and price; the layout repeats on every floor. Flat numbers read block, floor (ground = 0), flat, e.g. B02. Building names are unique across sites: if a name is taken, the site name is added after it.")}</div>
 				</div>
-				<div class="mf"><button class="alt" data-act="modal-close">${__("Cancel")}</button><button class="go" data-act="as-create">${__("Create site")}</button></div>`, "huge");
+				<div class="mf"><button class="alt" data-act="as-import" style="margin-right:auto">${__("Import flats from sheet")}</button><button class="alt" data-act="modal-close">${__("Cancel")}</button><button class="go" data-act="as-create">${__("Create site")}</button></div>`, "huge");
 			this.asSummary();
+		}
+
+		importFlats() {
+			const o = this.as.o, cc = this.as.cc !== "__new__" ? this.as.cc : (o.cost_centers[0] || {}).name;
+			this.closeModal();
+			const d = new frappe.ui.Dialog({
+				title: __("Import flats from sheet"),
+				fields: [
+					{ fieldname: "cost_center", fieldtype: "Select", label: __("Site (cost center)"), reqd: 1, options: o.cost_centers.map((c) => ({ value: c.name, label: c.label })), default: cc },
+					{ fieldname: "file", fieldtype: "Attach", label: __("Sheet (.xlsx or .csv)"), reqd: 1 },
+					{ fieldname: "default_price", fieldtype: "Currency", label: __("Base price for new flats without a Price column") },
+					{ fieldtype: "HTML", options: `<p class="text-muted">${__("One row per flat. Columns: Block, Floor, Flat No., Type, Total Area, Carpet Area, Facing, Price (optional). Existing flats are updated, new ones created.")}</p>` },
+				],
+				primary_action_label: __("Import"),
+				primary_action: async (v) => {
+					d.disable_primary_action();
+					try {
+						const r = await call("import_flats", { cost_center: v.cost_center, file_url: v.file, default_price: v.default_price || 0 });
+						d.hide();
+						frappe.show_alert({ message: __("{0} flats created, {1} updated", [r.created, r.updated]), indicator: "green" });
+						await this.load(v.cost_center);
+					} catch (e) { d.enable_primary_action(); }
+				},
+			});
+			d.show();
 		}
 
 		asPick(kind) {
 			this.asRead();
 			new frappe.ui.FileUploader({
-				restrictions: { allowed_file_types: kind === "brochure" ? [".pdf", "image/*"] : ["image/*"] },
+				restrictions: { allowed_file_types: [".pdf", "image/*"] },
 				make_attachments_public: false,
 				on_success: (f) => { this.as.media[kind] = f.file_url; this.as.media[kind + "_name"] = f.file_name; this.renderAddSite(); },
 			});
@@ -1044,8 +1099,8 @@
 		asBind() {
 			if (this.asBound) return;
 			this.asBound = true;
-			this.el.addEventListener("input", (e) => { if (this.as && e.target.closest && e.target.closest(".as-row")) { this.asRead(); this.asSummary(); } });
-			this.el.addEventListener("change", (e) => { if (this.as && e.target.id === "as-cc") { this.asRead(); this.renderAddSite(); } });
+			this.el.addEventListener("input", (e) => { if (this.as && e.target.closest && e.target.closest(".as-row, .as-flat")) { this.asRead(); this.asSummary(); } });
+			this.el.addEventListener("change", (e) => { if (this.as && (e.target.id === "as-cc" || e.target.dataset.k === "flats_per_floor" || e.target.dataset.k === "building_name" || e.target.dataset.k === "flat_type")) { this.asRead(); this.renderAddSite(); } });
 		}
 
 		asRead() {
@@ -1057,6 +1112,12 @@
 			if (cc) s.cc = cc.value;
 			if (pr) s.project = pr.value;
 			this.root.querySelectorAll(".as-row [data-k]").forEach((n) => { s.blocks[+n.dataset.i][n.dataset.k] = n.value; });
+			this.root.querySelectorAll(".as-flat [data-f]").forEach((n) => { (s.blocks[+n.dataset.i].flats[+n.dataset.j] ||= {})[n.dataset.f] = n.value; });
+		}
+
+		asLetter(name) {
+			const w = (name || "").match(/[A-Za-z0-9]+/g) || [];
+			return w.length ? ((w[w.length - 1].length === 1 ? w[w.length - 1] : w[0][0]) || "X").toUpperCase() : "X";
 		}
 
 		asSummary() {
@@ -1072,7 +1133,12 @@
 			if (isNew && !s.newName.trim()) return frappe.show_alert({ message: __("Enter the new site name"), indicator: "orange" });
 			for (const [i, b] of s.blocks.entries()) {
 				if (!b.building_name.trim()) return frappe.show_alert({ message: __("Block {0}: enter a building name", [i + 1]), indicator: "orange" });
-				if (!(+b.area_sqft > 0) || !(+b.base_price > 0)) return frappe.show_alert({ message: __("{0}: enter the area and base price", [b.building_name]), indicator: "orange" });
+				const per = +b.flats_per_floor || 0;
+				for (let j = 0; j < per; j++) {
+					const f = b.flats[j] || {};
+					if (!(+f.area_sqft > 0) || !(+(f.base_price || b.base_price) > 0)) return frappe.show_alert({ message: __("{0}, flat {1}: enter the total area and a price (or a default price)", [b.building_name, j + 1]), indicator: "orange" });
+				}
+				b.flats = b.flats.slice(0, per);
 			}
 			this.busy(btn, true);
 			try {
@@ -1323,9 +1389,12 @@
 			if (act === "present") return this.present();
 			if (act === "brochure") { const u = (this.block && this.block.brochure) || this.site.brochure; if (u) window.open(u, "_blank", "noopener"); return; }
 			if (act === "addsite") return this.openAddSite();
+			if (act === "delsite") return this.deleteSite(t.dataset.cc, t.dataset.name);
 			if (act === "as-addrow") { this.asRead(); this.as.blocks.push(this.as.blank()); return this.renderAddSite(); }
 			if (act === "as-delrow") { this.asRead(); this.as.blocks.splice(+t.dataset.i, 1); return this.renderAddSite(); }
+			if (act === "as-copyfirst") { this.asRead(); const b = this.as.blocks[+t.dataset.i], f = b.flats[0] || {}; b.flats = b.flats.map(() => ({ ...f })); return this.renderAddSite(); }
 			if (act === "as-create") return this.asCreate(t);
+			if (act === "as-import") return this.importFlats();
 			if (act === "as-pick") return this.asPick(t.dataset.k);
 			if (act === "as-clear") { this.asRead(); delete this.as.media[t.dataset.k]; return this.renderAddSite(); }
 			if (act === "as-open") { const id = this.asDone; this.closeModal(); return this.load(id); }

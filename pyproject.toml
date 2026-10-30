@@ -9,6 +9,7 @@ readme = "README.md"
 dynamic = ["version"]
 dependencies = [
     # "frappe~=15.0.0" # Installed and managed by bench.
+    "pypdfium2",  # renders a PDF page to an image (display image / floor plan uploaded as PDF)
 ]
 
 [build-system]

@@ -18,6 +18,7 @@ POSITION = "showcase_plan_position"
 
 CUSTOM_FIELDS = {
 	"Flat": [
+		{"fieldname": "carpet_area_sqft", "fieldtype": "Float", "label": "Carpet Area (sq ft)", "insert_after": "area_sqft"},
 		{"fieldname": "showcase_section", "fieldtype": "Section Break", "label": "Showcase (web view)", "insert_after": "remarks", "collapsible": 1},
 		{
 			"fieldname": POSITION, "fieldtype": "Int", "label": "Plan position", "insert_after": "showcase_section",
@@ -53,6 +54,7 @@ def ensure_fields():
 	from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
 	create_custom_fields(CUSTOM_FIELDS, update=True)
+	frappe.make_property_setter({"doctype": "Flat", "fieldname": "area_sqft", "property": "label", "value": "Total Area (sq ft)", "property_type": "Data"})
 	frappe.clear_cache(doctype="Flat")
 	return True
 

@@ -200,7 +200,7 @@
 /* tower detailing */
 .srs-part { position: absolute; left: 0; transform-style: preserve-3d; pointer-events: none; }
 .srs-slab .srs-part { pointer-events: auto; }
-.srs-face .num { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); color: rgba(246,244,241,.55); font-weight: 600; letter-spacing: .06em; pointer-events: none; }
+.srs-face .num { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); color: rgba(246,244,241,.95); font-weight: 700; letter-spacing: .04em; text-shadow: 0 1px 3px rgba(0,0,0,.8); pointer-events: none; }
 .srs-face .bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; opacity: .9; }
 .srs-face.tp { background-color: rgba(190, 205, 225, .16); }
 .srs-led { position: absolute; left: 0; background: rgba(246,244,241,.38); backface-visibility: hidden; pointer-events: none; }
@@ -355,7 +355,7 @@
 .srs-card.empty .nums span { font-size: 13px; color: var(--sand); }
 /* add site */
 .srs-modal.huge { width: min(1100px, 100%); }
-.srs-modal .as-head, .srs-modal .as-row { display: grid; grid-template-columns: 1.5fr .6fr .8fr .9fr .9fr 1fr 1.1fr 32px; gap: 8px; align-items: center; }
+.srs-modal .as-head, .srs-modal .as-row { display: grid; grid-template-columns: 1.5fr .6fr .8fr .9fr 1.1fr 32px; gap: 8px; align-items: center; }
 .srs-modal .as-head { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: #8a8478; margin-top: 4px; }
 .srs-modal .as-rows { display: flex; flex-direction: column; gap: 8px; }
 .srs-modal .as-row .fld { padding: 9px 10px; font-size: 14px; }
@@ -530,3 +530,14 @@
 .srs-sheet .media .gal .strip button { width: 64px; height: 48px; border: 2px solid transparent; border-radius: 6px; background: #eee center / cover no-repeat; padding: 0; opacity: .7; }
 .srs-sheet .media .gal .strip button.on { border-color: var(--ink); opacity: 1; }
 @media (max-width: 900px) { .srs-sheet .media:has(.gal) { min-height: 60vh; } .srs-sheet .media .gal img { min-height: 240px; } }
+.srs-card .del { position: absolute; top: 12px; right: 12px; z-index: 2; width: 32px; height: 32px; display: none; align-items: center; justify-content: center; border-radius: 50%; background: rgba(9,12,16,.7); font-size: 15px; cursor: pointer; }
+.srs-card:hover .del, .srs-card:focus-within .del { display: flex; }
+.srs-card .del:hover { background: #a33; }
+.srs-modal .as-block { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid #e0dbd0; border-radius: 12px; background: #fbfaf7; }
+.srs-modal .as-flats { display: flex; flex-direction: column; gap: 6px; }
+.srs-modal .as-fhead, .srs-modal .as-flat { display: grid; grid-template-columns: .6fr 1fr 1fr 1fr 1fr 1fr; gap: 8px; align-items: center; }
+.srs-modal .as-fhead { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: #8a8478; }
+.srs-modal .as-flat .fld { padding: 7px 9px; font-size: 13px; }
+.srs-modal .as-flat .pos { font-weight: 600; } .srs-modal .as-flat .pos i { font-style: normal; opacity: .45; }
+.srs-modal .as-flats a { cursor: pointer; text-decoration: underline; }
+@media (max-width: 900px) { .srs-modal .as-fhead { display: none; } .srs-modal .as-flat { grid-template-columns: 1fr 1fr; } }
