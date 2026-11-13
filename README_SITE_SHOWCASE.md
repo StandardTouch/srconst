@@ -176,3 +176,16 @@ what is missing or too low, never touches the `SRC *` roles or custom roles, and
 4. Change `DRY_RUN` to `False`, tick **Commit**, Execute. Repeat until the plan says `total: 0` (each run writes at most `LIMIT` rows).
 5. Clear the cache (`bench --site <site> clear-cache`), reload, and check with a user who holds only a standard role.
 6. Keep the output: it lists every created row and raised value so any change can be undone by hand.
+
+## UTS, facing filter, car parking, colors, reminders
+
+* **UTS** (undivided share in land, sq ft) is a Flat field next to Carpet area: Add site, import (column "UTS") and the flat sheet.
+* **Facing filter**: chips after Sold; combines with the status chips.
+* **Colors**: Available green; booked but nothing received yellow; red as soon as any receipt (booking amount, EMI or one-time)
+  exists on the booking (`_paid_bookings`: submitted Payment Entry of type Receive with `flat_booking_ref`). Such a flat reads "Sold".
+* **Car parking** (`parking.py`): `parking_amount` on Flat Booking, included in Total Sale Value, invoiced as its own "Car Parking"
+  line by the Server Script `scripts/flat_booking_on_submit_server_script.py`. Default price 3,50,000, `showcase_parking_amount` in
+  site_config.json; only Finance Head / MD can change it. "Add car parking" on a booked flat adds it later: a separate draft invoice,
+  and either one extra installment on a chosen date or a split over the unpaid installments.
+* **Customer**: Alternate Mobile, and a Reminders tab (`customer_reminders.py`). The reminder Server Script is
+  `scripts/overdue_reminder_server_script.py` (once a month, no amount for the customer, primary number else alternate).

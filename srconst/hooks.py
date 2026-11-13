@@ -256,6 +256,8 @@ doc_events = {
 	"Building": {"after_insert": "srconst.showcase_sync.building_changed", "on_update": "srconst.showcase_sync.building_changed", "on_trash": "srconst.showcase_sync.building_changed"},
 	"Flat Booking": {"on_submit": "srconst.showcase_sync.booking_changed", "on_cancel": "srconst.showcase_sync.booking_changed", "on_update_after_submit": "srconst.showcase_sync.booking_changed"},
 	"Flat Booking Cancellation": {"on_submit": "srconst.showcase_sync.booking_changed"},
+	"Payment Entry": {"on_submit": "srconst.showcase_sync.payment_changed", "on_cancel": "srconst.showcase_sync.payment_changed"},
+	"Customer": {"onload": "srconst.customer_reminders.onload"},
 }
 
 # The "Showcase (web view)" section of the Flat form: a button to open the flat on the page

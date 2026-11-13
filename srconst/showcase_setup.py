@@ -34,3 +34,11 @@ def after_migrate():
 
 	if flat_showcase.ensure_fields():  # the Showcase section on the Flat form, then positions for the flats that have none
 		flat_showcase.backfill_positions()
+
+	from srconst import customer_reminders
+
+	customer_reminders.ensure_fields()
+
+	from srconst import parking
+
+	parking.ensure_fields()

@@ -45,3 +45,10 @@ def booking_changed(doc, method=None):
 	flat = doc.get("flat")
 	if flat:
 		_notify(frappe.db.get_value("Flat", flat, "building"))
+
+
+def payment_changed(doc, method=None):
+	"""Payment Entry (receipt on a booking): a first payment turns the flat red on open pages."""
+	ref = doc.get("flat_booking_ref")
+	if ref:
+		booking_changed(frappe._dict(flat=frappe.db.get_value("Flat Booking", ref, "flat")))

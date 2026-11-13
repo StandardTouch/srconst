@@ -26,6 +26,7 @@
 			this.drag = null;
 			this.mode = "tower";
 			this.filter = null;
+			this.facing = null;
 			this.perms = {};
 			this.hoverSlab = null;
 			this.dwell = null;
@@ -517,9 +518,11 @@
 			q(".srs-lvl-head h2").innerHTML = /\d/.test(lv.label) ? esc(lv.label).replace(/(\d+)/, "<em>$1</em>") : esc(lv.label).replace(/(\S+)$/, "<em>$1</em>");
 			q(".srs-lvl-head small").textContent = lv.group || `${this.block.name} · ${lv.units.length} ${__("residences")}`;
 			const st = this.levelStats(lv);
+			if (this.facing && !lv.units.some((u) => u.facing === this.facing)) this.facing = null;
 			const chip = (k, color, n, label) => `<button class="srs-chip ${this.filter === k ? "on" : ""}" data-filter="${k}" title="${__("Highlight on plan, cards and tower")}"><i class="srs-dot" style="background:${color}"></i><b>${n}</b>${label}</button>`;
 			q(".srs-counts").innerHTML = `<span class="srs-total"><b>${st.total}</b>${__("Residences")}</span>`
-				+ chip("available", "var(--ok)", st.a, __("Available")) + chip("process", "var(--warn)", st.p, __("In process")) + chip("sold", "var(--bad)", st.s, __("Sold"));
+				+ chip("available", "var(--ok)", st.a, __("Available")) + chip("process", "var(--warn)", st.p, __("In process")) + chip("sold", "var(--bad)", st.s, __("Sold"))
+				+ [...new Set(lv.units.map((u) => u.facing).filter(Boolean))].sort().map((fc) => `<button class="srs-chip ${this.facing === fc ? "on" : ""}" data-facing="${esc(fc)}" title="${__("Show only flats facing {0}", [fc])}"><b>${lv.units.filter((u) => u.facing === fc).length}</b>${esc(fc)}</button>`).join("");
 
 			const ratio = lv.floorplate ? await this.ratio(lv.floorplate) : 0;
 			if (this.level !== lv) return; // user moved on while the plan was loading
@@ -555,14 +558,14 @@
 		statusKey(u) { return /sold/i.test(u.status) ? "sold" : /avail/i.test(u.status) ? "available" : "process"; }
 
 		applyFilter() {
-			const f = this.filter;
-			this.root.querySelectorAll(".srs-chip").forEach((c) => c.classList.toggle("on", c.dataset.filter === f));
+			const f = this.filter, fa = this.facing, hit = (u) => (!f || this.statusKey(u) === f) && (!fa || u.facing === fa);
+			this.root.querySelectorAll(".srs-chip").forEach((c) => c.classList.toggle("on", c.dataset.filter ? c.dataset.filter === f : c.dataset.facing === fa));
 			if (this.slabs && this.block) {
-				this.slabs.forEach((s, i) => s.classList.toggle("dim", !!f && !this.block.levels[i].units.some((u) => this.statusKey(u) === f)));
+				this.slabs.forEach((s, i) => s.classList.toggle("dim", !!(f || fa) && !this.block.levels[i].units.some(hit)));
 			}
 			if (this.level) {
 				this.level.units.forEach((u, i) => {
-					const dim = !!f && this.statusKey(u) !== f;
+					const dim = !hit(u);
 					this.root.querySelectorAll(`.srs-split [data-unit="${i}"]`).forEach((n) => n.classList.toggle("dim", dim));
 				});
 			}
@@ -814,6 +817,7 @@
 				[__("Type"), u.type || na],
 				[__("Total area"), u.area ? u.area + " sq ft" : na],
 				[__("Carpet area"), u.carpetArea ? u.carpetArea + " sq ft" : na],
+				[__("UTS (undivided share)"), u.uts ? u.uts + " sq ft" : na],
 				[__("Facing"), u.facing || na],
 				...Object.entries(u.dims || {}).map(([k, v]) => [k.replace(/([A-Z])/g, " $1").replace(/^./, (ch) => ch.toUpperCase()), v]),
 			];
@@ -871,8 +875,12 @@
 					<div><small>${__("Received")}</small>${money(info.total_received)}</div>
 					<div><small>${__("Outstanding")}</small>${money(info.total_outstanding)}</div>
 				</div>
+				${info.parking_amount ? `<div class="muted">${__("Car parking included")}: ${money(info.parking_amount)}</div>` : ""}
 				<div class="muted">${esc(paid)}${info.sales_invoice ? " · " + __("Invoice") + " " + esc(info.sales_invoice) : ""}</div></div>`;
 			const acts = this.q(".srs-sheet .acts");
+			if (info.can_add_parking && !info.parking_amount && acts && !acts.querySelector('[data-act="add-parking"]')) {
+				acts.insertAdjacentHTML("afterbegin", `<button class="alt" data-act="add-parking">${__("Add car parking")}</button>`);
+			}
 			if (this.perms.cancel && info.docstatus === 1 && !info.pending_cancellation && acts && !acts.querySelector('[data-act="cancel-booking"]')) {
 				acts.insertAdjacentHTML("afterbegin", `<button class="danger" data-act="cancel-booking">${__("Cancel booking")}</button>`);
 			}
@@ -1027,6 +1035,7 @@
 					<select class="fld" data-i="${i}" data-j="${j}" data-f="flat_type">${sel(o.flat_types, f.flat_type || "", b.flat_type ? `${b.flat_type} (${__("default")})` : "—")}</select>
 					<input class="fld" data-i="${i}" data-j="${j}" data-f="area_sqft" type="number" min="0" step="any" placeholder="${__("total sq ft")}" value="${esc(f.area_sqft ?? "")}">
 					<input class="fld" data-i="${i}" data-j="${j}" data-f="carpet_area_sqft" type="number" min="0" step="any" placeholder="${__("carpet sq ft")}" value="${esc(f.carpet_area_sqft ?? "")}">
+					<input class="fld" data-i="${i}" data-j="${j}" data-f="uts_sqft" type="number" min="0" step="any" placeholder="${__("UTS sq ft")}" value="${esc(f.uts_sqft ?? "")}">
 					<select class="fld" data-i="${i}" data-j="${j}" data-f="facing">${sel(o.facings, f.facing || "", "—")}</select>
 					<input class="fld" data-i="${i}" data-j="${j}" data-f="base_price" type="number" min="0" step="any" placeholder="${b.base_price ? esc(b.base_price) : __("price")}" value="${esc(f.base_price ?? "")}"></div>`).join("");
 				return `<div class="as-block"><div class="as-row">
@@ -1036,7 +1045,7 @@
 				<select class="fld" data-i="${i}" data-k="flat_type">${sel(o.flat_types, b.flat_type, "—")}</select>
 				<input class="fld" data-i="${i}" data-k="base_price" type="number" min="0" step="any" placeholder="${__("price")}" value="${esc(b.base_price)}">
 				<button class="x3" data-act="as-delrow" data-i="${i}" title="${__("Remove")}" ${s.blocks.length === 1 ? "disabled" : ""}>✕</button></div>
-				<div class="as-flats"><div class="as-fhead"><span>${__("Flat")}</span><span>${__("Type")}</span><span>${__("Total area")}</span><span>${__("Carpet area")}</span><span>${__("Facing")}</span><span>${__("Price")}</span></div>${cells}
+				<div class="as-flats"><div class="as-fhead"><span>${__("Flat")}</span><span>${__("Type")}</span><span>${__("Total area")}</span><span>${__("Carpet area")}</span><span>${__("UTS")}</span><span>${__("Facing")}</span><span>${__("Price")}</span></div>${cells}
 				<div class="muted">${__("Flat position on every floor: the same layout repeats on all {0} floors. Leave type or price empty to use the block default.", [b.floors || 0])} <a data-act="as-copyfirst" data-i="${i}">${__("Copy first flat to all")}</a></div></div></div>`;
 			}).join("");
 			this.modal(`<div class="mh"><h3>${__("Add")} <em>${__("site")}</em></h3><button class="x2" data-act="modal-close">✕</button></div>
@@ -1071,7 +1080,7 @@
 					{ fieldname: "cost_center", fieldtype: "Select", label: __("Site (cost center)"), reqd: 1, options: o.cost_centers.map((c) => ({ value: c.name, label: c.label })), default: cc },
 					{ fieldname: "file", fieldtype: "Attach", label: __("Sheet (.xlsx or .csv)"), reqd: 1 },
 					{ fieldname: "default_price", fieldtype: "Currency", label: __("Base price for new flats without a Price column") },
-					{ fieldtype: "HTML", options: `<p class="text-muted">${__("One row per flat. Columns: Block, Floor, Flat No., Type, Total Area, Carpet Area, Facing, Price (optional). Existing flats are updated, new ones created.")}</p>` },
+					{ fieldtype: "HTML", options: `<p class="text-muted">${__("One row per flat. Columns: Block, Floor, Flat No., Type, Total Area, Carpet Area, UTS, Facing, Price (optional). Existing flats are updated, new ones created.")}</p>` },
 				],
 				primary_action_label: __("Import"),
 				primary_action: async (v) => {
@@ -1171,8 +1180,8 @@
 			try { defs = await call("booking_defaults", { flat: u.id }); } catch (e) { return; }
 			if (defs.flat.status !== "Empty") { frappe.msgprint(__("This flat is {0} now. Only Empty flats can be booked.", [defs.flat.status])); return this.refreshSite(); }
 			const tmpl = (defs.templates.find((t) => t.is_default) || {}).name || (defs.templates.length === 1 ? defs.templates[0].name : "");
-			this.bk = { unit: u, defs, step: 1, mode: "existing", payMode: "installments", picked: null, nc: { customer_name: "", mobile_number: "", customer_email: "" },
-				total: defs.flat.base_price || "", booking_amount: "", months: 12, start: defs.first_installment, date: defs.today, tax: tmpl, preview: null, remarks: "" };
+			this.bk = { unit: u, defs, step: 1, mode: "existing", payMode: "installments", picked: null, nc: { customer_name: "", mobile_number: "", alternate_mobile: "", customer_email: "" },
+				total: defs.flat.base_price || "", booking_amount: "", months: 12, start: defs.first_installment, date: defs.today, tax: tmpl, preview: null, remarks: "", park: false, parkAmt: (defs.parking || {}).amount || "" };
 			this.renderBooking();
 		}
 
@@ -1190,6 +1199,7 @@
 				} else {
 					body += `<label>${__("Full name")}<input class="fld" id="bk-nm" value="${esc(b.nc.customer_name)}"></label>
 						<label>${__("Mobile number")}<input class="fld" id="bk-mob" inputmode="tel" value="${esc(b.nc.mobile_number)}"></label>
+						<label>${__("Alternate mobile (optional)")}<input class="fld" id="bk-alt" inputmode="tel" value="${esc(b.nc.alternate_mobile)}"></label>
 						<label>${__("Email (optional)")}<input class="fld" id="bk-em" type="email" value="${esc(b.nc.customer_email)}"></label>`;
 				}
 			} else if (b.step === 2) {
@@ -1202,6 +1212,7 @@
 					<label>${__("First installment on")}<input class="fld" id="bk-start" type="date" value="${esc(b.start)}"></label>`}
 					<label>${__("Booking date")}<input class="fld" id="bk-date" type="date" value="${esc(b.date)}"></label>
 					<label>${__("GST template")} *<select class="fld" id="bk-tax"><option value="" disabled ${b.tax ? "" : "selected"}>${__("Select GST template")}</option>${b.defs.templates.map((t) => `<option value="${esc(t.name)}" ${t.name === b.tax ? "selected" : ""}>${esc(t.title || t.name)} (${t.rate}%)</option>`).join("")}</select></label>
+					${(b.defs.parking || {}).enabled ? `<label class="chk span2"><input type="checkbox" id="bk-park" data-act="bk-park" ${b.park ? "checked" : ""}> ${__("Include car parking")}</label>${b.park ? `<label class="span2">${__("Car parking amount (before GST)")}<input class="fld" id="bk-parkamt" type="number" min="0" step="any" value="${esc(b.parkAmt)}" ${b.defs.can_edit_price ? "" : "readonly"}></label>` : ""}` : ""}
 				</div><div id="bk-prev" class="prev muted">${__("Fill the amounts to see the schedule")}</div>`;
 			} else {
 				const p = b.preview, c = b.picked || b.nc;
@@ -1209,6 +1220,7 @@
 					<tr><td>${__("Flat")}</td><td>${esc(f.flat_number)} · ${esc(f.building)}${f.floor ? " · " + esc(f.floor) : ""}</td></tr>
 					<tr><td>${__("Customer")}</td><td>${esc(c.customer_name)}${c.mobile_number ? " · " + esc(c.mobile_number) : ""}${b.mode === "new" ? ` <small>(${__("new")})</small>` : ""}</td></tr>
 					<tr><td>${__("Sale value")}</td><td>${money(b.total)}</td></tr>
+					${b.park ? `<tr><td>${__("Car parking")}</td><td>${money(b.parkAmt)}</td></tr>` : ""}
 					${p && p.gst_amount ? `<tr><td>${__("GST")} (${p.gst_rate}%)</td><td>${money(p.gst_amount)}</td></tr><tr><td>${__("Total with GST")}</td><td>${money(p.total_with_gst)}</td></tr>` : ""}
 					<tr><td>${__("Booking amount")}</td><td>${money(b.booking_amount)}</td></tr>
 					${b.payMode === "one_time"
@@ -1242,14 +1254,14 @@
 
 		bkRead() {
 			const b = this.bk, v = (id) => { const n = this.q(id); return n ? n.value : null; };
-			if (b.step === 1 && b.mode === "new") b.nc = { customer_name: v("#bk-nm") || "", mobile_number: v("#bk-mob") || "", customer_email: v("#bk-em") || "" };
-			if (b.step === 2) { b.total = v("#bk-total"); b.booking_amount = v("#bk-amt"); if (b.payMode !== "one_time") b.months = v("#bk-months"); b.start = v("#bk-start"); b.date = v("#bk-date"); b.tax = v("#bk-tax"); }
+			if (b.step === 1 && b.mode === "new") b.nc = { customer_name: v("#bk-nm") || "", mobile_number: v("#bk-mob") || "", alternate_mobile: v("#bk-alt") || "", customer_email: v("#bk-em") || "" };
+			if (b.step === 2) { b.total = v("#bk-total"); b.booking_amount = v("#bk-amt"); if (b.payMode !== "one_time") b.months = v("#bk-months"); b.start = v("#bk-start"); b.date = v("#bk-date"); b.tax = v("#bk-tax"); b.park = !!(this.q("#bk-park") || {}).checked; if (b.park) b.parkAmt = v("#bk-parkamt"); }
 			if (b.step === 3) b.remarks = v("#bk-rem") || "";
 		}
 
 		bkPreview() {
 			clearTimeout(this.pvT);
-			["#bk-total", "#bk-amt", "#bk-months", "#bk-start", "#bk-tax"].forEach((s) => {
+			["#bk-total", "#bk-amt", "#bk-months", "#bk-start", "#bk-tax", "#bk-parkamt"].forEach((s) => {
 				const n = this.q(s);
 				if (n && !n.dataset.bound) { n.dataset.bound = 1; n.addEventListener("input", () => { clearTimeout(this.pvT); this.pvT = setTimeout(() => { this.bkRead(); this.bkPreview(); }, 300); }); n.addEventListener("change", () => { this.bkRead(); this.bkPreview(); }); }
 			});
@@ -1257,7 +1269,7 @@
 			const b = this.bk, box = this.q("#bk-prev");
 			if (!b.tax) { b.preview = null; box.className = "prev muted"; box.textContent = __("Select a GST template to see the schedule"); return; }
 			if (!(+b.total > 0) || b.booking_amount === "" || (b.payMode !== "one_time" && !(+b.months >= 1)) || !b.start) { b.preview = null; box.className = "prev muted"; box.textContent = __("Fill the amounts to see the schedule"); return; }
-			call("preview_schedule", { total_sale_value: b.total, booking_amount: b.booking_amount, installment_months: b.payMode === "one_time" ? 1 : b.months, installment_start_date: b.start, taxes_and_charges: b.tax || null, payment_mode: b.payMode })
+			call("preview_schedule", { total_sale_value: b.total, booking_amount: b.booking_amount, installment_months: b.payMode === "one_time" ? 1 : b.months, installment_start_date: b.start, taxes_and_charges: b.tax || null, payment_mode: b.payMode, parking_amount: b.park ? b.parkAmt : 0 })
 				.then((p) => {
 					if (!this.bk || this.q("#bk-prev") !== box) return;
 					b.preview = p;
@@ -1293,7 +1305,7 @@
 				const r = await call("book_flat", {
 					flat: b.unit.id, booking_date: b.date, total_sale_value: b.total, booking_amount: b.booking_amount, installment_months: b.payMode === "one_time" ? 1 : b.months, payment_mode: b.payMode,
 					installment_start_date: b.start, customer: b.mode === "existing" ? b.picked.name : null,
-					new_customer: b.mode === "new" ? JSON.stringify(b.nc) : null, taxes_and_charges: b.tax, remarks: b.remarks,
+					new_customer: b.mode === "new" ? JSON.stringify(b.nc) : null, taxes_and_charges: b.tax, remarks: b.remarks, parking_amount: b.park ? b.parkAmt : 0,
 				});
 				this.modal(`<div class="mh"><h3>${__("Flat")} <em>${__("booked")}</em></h3><button class="x2" data-act="modal-close">✕</button></div>
 					<div class="mb done"><div class="tick">✓</div>
@@ -1304,6 +1316,38 @@
 				await this.refreshSite();
 			} catch (e) {
 				this.busy(btn, false); // Frappe has shown the server's message; keep the form so nothing is retyped
+			}
+		}
+
+		/* ---------- add car parking to an existing booking ---------- */
+		openParking() {
+			const info = this.booking, u = this.level.units[this.unit];
+			if (!info) return;
+			const split = info.parking_splittable; // a fully paid (sold) booking has no installment left to add to: single payment only
+			this.modal(`<div class="mh"><h3>${__("Car parking")} <em>${esc(u.name)}</em></h3><button class="x2" data-act="modal-close">✕</button></div>
+				<div class="mb">
+					<label>${__("Car parking amount (before GST)")}<input class="fld" id="pk-amt" type="number" min="0" step="any" value="${esc(info.parking_default)}"></label>
+					<div class="seg"><button data-act="pk-mode" data-pm="installments" class="${split ? "on" : ""}" ${split ? "" : "disabled"}>${__("Add to the installments")}</button><button data-act="pk-mode" data-pm="single" class="${split ? "" : "on"}">${__("Single payment")}</button></div>
+					<label id="pk-datewrap" ${split ? "hidden" : ""}>${__("Due on")}<input class="fld" id="pk-date" type="date" value="${esc(frappe.datetime ? frappe.datetime.add_days(frappe.datetime.get_today(), 30) : "")}"></label>
+					<div class="muted" id="pk-hint">${split ? __("The amount, with GST, is split over the installments not yet paid. A separate draft sales invoice is created for the parking.") : __("All installments are paid, so the amount, with GST, becomes one extra payment on the date above.")}</div>
+				</div>
+				<div class="mf"><button class="alt" data-act="modal-close">${__("Cancel")}</button><button class="go" data-act="pk-confirm">${__("Add car parking")}</button></div>`);
+			this.pkMode = split ? "installments" : "single";
+		}
+
+		async pkConfirm(btn) {
+			const info = this.booking, amt = this.q("#pk-amt").value, date = this.q("#pk-date").value;
+			if (!(+amt > 0)) return frappe.show_alert({ message: __("Enter the parking amount"), indicator: "orange" });
+			if (this.pkMode === "single" && !date) return frappe.show_alert({ message: __("Choose the due date"), indicator: "orange" });
+			this.busy(btn, true);
+			try {
+				const r = await call("add_parking", { booking: info.name, mode: this.pkMode, due_date: this.pkMode === "single" ? date : null, parking_amount: amt });
+				this.modal(`<div class="mh"><h3>${__("Car parking")} <em>${__("added")}</em></h3><button class="x2" data-act="modal-close">✕</button></div>
+					<div class="mb done"><div class="tick">✓</div><p class="muted">${__("Invoice")} ${esc(r.sales_invoice)} (${__("draft")})</p></div>
+					<div class="mf"><span></span><button class="go" data-act="modal-close">${__("Done")}</button></div>`);
+				await this.refreshSite();
+			} catch (e) {
+				this.busy(btn, false);
 			}
 		}
 
@@ -1357,7 +1401,7 @@
 
 		/* ---------- events ---------- */
 		onClick(e) {
-			const t = e.target.closest("[data-act],[data-site],[data-block],[data-mode],[data-filter],[data-step],[data-unit],[data-view],[data-photo],[data-nav],.srs-slab");
+			const t = e.target.closest("[data-act],[data-site],[data-block],[data-mode],[data-filter],[data-facing],[data-step],[data-unit],[data-view],[data-photo],[data-nav],.srs-slab");
 			if (!t) return;
 			const act = t.dataset.act;
 			if (t.dataset.site) return this.selectSite(t.dataset.site);
@@ -1376,6 +1420,7 @@
 				if (this.mode === "elev") gsap.fromTo(".srs-elev img", { scale: 1.06, opacity: 0 }, { scale: 1, opacity: 1, duration: 1 });
 				return;
 			}
+			if (t.dataset.facing) { this.facing = this.facing === t.dataset.facing ? null : t.dataset.facing; return this.renderLevel(this.level); }
 			if (t.dataset.filter) { this.filter = this.filter === t.dataset.filter ? null : t.dataset.filter; return this.applyFilter(); }
 			if (t.dataset.step) return this.step(+t.dataset.step);
 			if (t.dataset.unit != null && t.dataset.unit !== "") return this.openUnit(+t.dataset.unit);
@@ -1399,6 +1444,16 @@
 			if (act === "as-clear") { this.asRead(); delete this.as.media[t.dataset.k]; return this.renderAddSite(); }
 			if (act === "as-open") { const id = this.asDone; this.closeModal(); return this.load(id); }
 			if (act === "setup") return this.setup();
+			if (act === "bk-park") { this.bkRead(); return this.renderBooking(); }
+			if (act === "pk-mode") {
+				this.pkMode = t.dataset.pm;
+				this.root.querySelectorAll('[data-act="pk-mode"]').forEach((n) => n.classList.toggle("on", n === t));
+				this.q("#pk-datewrap").hidden = this.pkMode !== "single";
+				this.q("#pk-hint").textContent = this.pkMode === "single" ? __("The amount, with GST, becomes one extra payment on the date above.") : __("The amount, with GST, is split over the installments not yet paid. A separate draft sales invoice is created for the parking.");
+				return;
+			}
+			if (act === "add-parking") return this.openParking();
+			if (act === "pk-confirm") return this.pkConfirm(t);
 			if (act === "book") return this.openBooking();
 			if (act === "cancel-booking") return this.openCancel();
 			if (act === "modal-close") return this.closeModal();
