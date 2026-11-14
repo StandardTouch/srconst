@@ -1255,7 +1255,7 @@
 		bkRead() {
 			const b = this.bk, v = (id) => { const n = this.q(id); return n ? n.value : null; };
 			if (b.step === 1 && b.mode === "new") b.nc = { customer_name: v("#bk-nm") || "", mobile_number: v("#bk-mob") || "", alternate_mobile: v("#bk-alt") || "", customer_email: v("#bk-em") || "" };
-			if (b.step === 2) { b.total = v("#bk-total"); b.booking_amount = v("#bk-amt"); if (b.payMode !== "one_time") b.months = v("#bk-months"); b.start = v("#bk-start"); b.date = v("#bk-date"); b.tax = v("#bk-tax"); b.park = !!(this.q("#bk-park") || {}).checked; if (b.park) b.parkAmt = v("#bk-parkamt"); }
+			if (b.step === 2) { b.total = v("#bk-total"); b.booking_amount = v("#bk-amt"); if (b.payMode !== "one_time") b.months = v("#bk-months"); b.start = v("#bk-start"); b.date = v("#bk-date"); b.tax = v("#bk-tax"); b.park = !!(this.q("#bk-park") || {}).checked; const pa = this.q("#bk-parkamt"); if (pa) b.parkAmt = pa.value; }  // the amount box does not exist yet right after ticking
 			if (b.step === 3) b.remarks = v("#bk-rem") || "";
 		}
 
