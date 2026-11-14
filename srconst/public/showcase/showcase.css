@@ -535,7 +535,7 @@
 .srs-card .del:hover { background: #a33; }
 .srs-modal .as-block { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid #e0dbd0; border-radius: 12px; background: #fbfaf7; }
 .srs-modal .as-flats { display: flex; flex-direction: column; gap: 6px; }
-.srs-modal .as-fhead, .srs-modal .as-flat { display: grid; grid-template-columns: .6fr 1fr 1fr 1fr 1fr 1fr; gap: 8px; align-items: center; }
+.srs-modal .as-fhead, .srs-modal .as-flat { display: grid; grid-template-columns: .6fr 1fr 1fr 1fr 1fr 1fr 1fr; gap: 8px; align-items: center; }
 .srs-modal .as-fhead { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: #8a8478; }
 .srs-modal .as-flat .fld { padding: 7px 9px; font-size: 13px; }
 .srs-modal .as-flat .pos { font-weight: 600; } .srs-modal .as-flat .pos i { font-style: normal; opacity: .45; }

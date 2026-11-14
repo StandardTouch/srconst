@@ -22,6 +22,8 @@ import frappe
 from frappe import _
 from frappe.utils import add_months, cint, flt, getdate, nowdate
 
+from srconst import parking
+
 CACHE_DIR = "showcase_cache"  # under the site's public/files, so it survives app updates and is site specific
 MANAGE_ROLES = ("System Manager", "SRC MD", "SRC Admin")  # showcase media, flat mapping
 CREATE_SITE_ROLES = ("System Manager", "SRC MD")  # may add Buildings and Flats from the page (see create_site_flats)
@@ -184,7 +186,7 @@ def _natural(s):
 	return [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", s or "")]
 
 
-SHOWCASE_FLAT_FIELDS = ["carpet_area_sqft", "showcase_plan_position", "showcase_inside_image", "showcase_description", "showcase_highlights"]
+SHOWCASE_FLAT_FIELDS = ["carpet_area_sqft", "uts_sqft", "showcase_plan_position", "showcase_inside_image", "showcase_description", "showcase_highlights"]
 
 
 def _flat_fields():
@@ -219,6 +221,13 @@ def _positions(rows):
 	return pos
 
 
+def _paid_bookings(refs):
+	"""Bookings with at least one receipt (booking amount, EMI or one-time payment): their flat counts as Sold (red)."""
+	if not refs or not frappe.get_meta("Payment Entry").has_field("flat_booking_ref"):
+		return set()
+	return set(frappe.get_all("Payment Entry", filters={"flat_booking_ref": ["in", refs], "docstatus": 1, "payment_type": "Receive", "paid_amount": [">", 0]}, pluck="flat_booking_ref"))
+
+
 def _erp_site(site_id):
 	site = _sites().get(site_id)
 	if not site:
@@ -234,6 +243,7 @@ def _erp_site(site_id):
 		limit_page_length=0,
 	)
 	photos = _flat_photos([f.name for f in flats])
+	paid_refs = _paid_bookings([f.booking_ref for f in flats if f.status == "In Process" and f.booking_ref])
 	media = {m.building: m for m in frappe.get_all("Building Showcase", fields=["building", "building_image", "floor_plan_image", "plan_hotspots", "brochure"], filters={"building": ["in", names]})}
 	plan_rows = {}
 	for r in frappe.get_all(
@@ -296,8 +306,9 @@ def _erp_site(site_id):
 						"facing": f.facing or "",
 						"area": flt(f.area_sqft) or None,
 						"carpetArea": flt(f.get("carpet_area_sqft")) or None,
+						"uts": flt(f.get("uts_sqft")) or None,
 						"price": flt(f.base_price) or None,
-						"status": STATUS_LABEL.get(f.status, f.status),
+						"status": "Sold" if f.booking_ref in paid_refs and f.status == "In Process" else STATUS_LABEL.get(f.status, f.status),
 						"rawStatus": f.status,
 						"bookingRef": f.booking_ref,
 						"render3d": optimized(inside, 1600) if inside else (crop[0] if crop else None),
@@ -470,7 +481,7 @@ def delete_site(cost_center):
 IMPORT_COLUMNS = {
 	"block": ("block", "building"), "floor": ("floor",), "flat_number": ("flat no", "flat no.", "flat number", "flat"),
 	"flat_type": ("type", "flat type"), "area": ("total area", "total area sq.ft.", "total area sqft", "area", "super built-up"),
-	"carpet": ("carpet area", "carpet area sq.ft.", "carpet area sqft", "carpet"), "facing": ("facing",), "price": ("price", "base price"),
+	"carpet": ("carpet area", "carpet area sq.ft.", "carpet area sqft", "carpet"), "uts": ("uts", "uds", "undivided share", "uts sq.ft."), "facing": ("facing",), "price": ("price", "base price"),
 }
 
 
@@ -543,6 +554,8 @@ def import_flats(cost_center, file_url, default_price=0):
 			values = {"area_sqft": area, "flat_type": ftype or None, "facing": facing}
 			if has_carpet and cell(r, "carpet"):
 				values["carpet_area_sqft"] = flt(cell(r, "carpet"))
+			if has_carpet and cell(r, "uts"):  # both fields are created together
+				values["uts_sqft"] = flt(cell(r, "uts"))
 			price = flt(cell(r, "price"))
 			existing = frappe.db.get_value("Flat", {"building": buildings[letter], "flat_number": number})
 			if existing:
@@ -652,13 +665,14 @@ def create_site_flats(cost_center=None, project=None, blocks=None, building_imag
 			t = template[n] if n < len(template) and isinstance(template[n], dict) else {}
 			t_type, t_facing = (t.get("flat_type") or ftype).strip(), (t.get("facing") or "").strip()
 			t_area, t_carpet, t_price = flt(t.get("area_sqft") or b.get("area_sqft")), flt(t.get("carpet_area_sqft")), flt(t.get("base_price")) or price
+			t_uts = flt(t.get("uts_sqft"))
 			if t_area <= 0 or t_price <= 0:
 				frappe.throw(_("{0}, flat {1}: total area and price must be greater than zero").format(name, n + 1))
 			if t_type and t_type not in types:
 				frappe.throw(_("{0}, flat {1}: unknown flat type {2}").format(name, n + 1, t_type))
 			if t_facing and t_facing not in facings:
 				frappe.throw(_("{0}, flat {1}: unknown facing {2}").format(name, n + 1, t_facing))
-			layout.append((t_type, t_area, t_carpet, t_price, t_facing))
+			layout.append((t_type, t_area, t_carpet, t_price, t_facing, t_uts))
 		total += floors * per
 		clean.append((name, floors, per, layout, entered))
 	if total > MAX_FLATS_PER_CALL:
@@ -682,14 +696,14 @@ def create_site_flats(cost_center=None, project=None, blocks=None, building_imag
 			letter = _block_letter(entered)
 			for floor in floors_all[:floors]:
 				for n in range(1, per + 1):
-					ftype, area, carpet, price, facing = layout[n - 1]
+					ftype, area, carpet, price, facing, uts = layout[n - 1]
 					frappe.get_doc(
 						{
 							"doctype": "Flat", "naming_series": FLOOR_SERIES.get(floor, "GF-.####"), "flat_number": flat_number(letter, floors_all.index(floor), n),
 							"block": letter if letter in block_options else None, "building": building.name, "floor": floor, "status": "Empty",
 							"company": cc.company, "cost_center": cc.name, "area_sqft": area, "base_price": price,
 							"flat_type": ftype or None, "facing": facing or None, **({"showcase_plan_position": n} if has_position else {}),
-							**({"carpet_area_sqft": carpet} if carpet and has_carpet else {}),
+							**({"carpet_area_sqft": carpet} if carpet and has_carpet else {}), **({"uts_sqft": uts} if uts and has_carpet else {}),
 						}
 					).insert(ignore_permissions=True)
 			created.append({"building": building.name, "flats": floors * per, "renamed": building.name != entered})
@@ -988,14 +1002,16 @@ def booking_defaults(flat):
 		},
 		"templates": templates,
 		"can_edit_price": _perms()["edit_price"],
+		"parking": {"amount": parking.default_amount(), "enabled": frappe.get_meta("Flat Booking").has_field("parking_amount")},
 		"today": nowdate(),
 		"first_installment": str(add_months(getdate(nowdate()), 1)),
 	}
 
 
 @frappe.whitelist()
-def preview_schedule(total_sale_value, booking_amount, installment_months, installment_start_date, taxes_and_charges=None, payment_mode="installments"):
+def preview_schedule(total_sale_value, booking_amount, installment_months, installment_start_date, taxes_and_charges=None, payment_mode="installments", parking_amount=0):
 	frappe.has_permission("Flat Booking", "create", throw=True)
+	total_sale_value = flt(total_sale_value) + flt(parking_amount)
 	if not taxes_and_charges:
 		frappe.throw(_("Select a GST template"))
 	rate = _template_rate(taxes_and_charges)
@@ -1033,13 +1049,16 @@ def _new_customer(c):
 	doc = frappe.get_doc({"doctype": "Customer", "customer_name": name, "mobile_number": mobile, "customer_type": c.get("customer_type") or "Individual"})
 	if c.get("customer_email"):
 		doc.customer_email = c["customer_email"].strip()
+	alt = re.sub(r"[^0-9+]", "", c.get("alternate_mobile") or "")
+	if alt and frappe.get_meta("Customer").has_field("alternate_mobile"):
+		doc.alternate_mobile = alt
 	doc.insert()  # as the logged-in user: if they cannot create customers they get Frappe's normal permission error
 	return doc.name
 
 
 @frappe.whitelist(methods=["POST"])
 def book_flat(flat, booking_date, total_sale_value, booking_amount, installment_months, installment_start_date,
-			customer=None, new_customer=None, taxes_and_charges=None, remarks=None, payment_mode="installments"):
+			customer=None, new_customer=None, taxes_and_charges=None, remarks=None, payment_mode="installments", parking_amount=0):
 	"""Create and submit a Flat Booking. The ERP's own scripts do the rest (flat status, invoice, WhatsApp PDF)."""
 	frappe.has_permission("Flat Booking", "create", throw=True)
 	if isinstance(new_customer, str):
@@ -1065,11 +1084,19 @@ def book_flat(flat, booking_date, total_sale_value, booking_amount, installment_
 		tmpl = frappe.db.get_value("Sales Taxes and Charges Template", taxes_and_charges, ["company", "disabled"], as_dict=True)
 		if not tmpl or tmpl.disabled or tmpl.company != f.company:
 			frappe.throw(_("GST template {0} cannot be used for company {1}").format(taxes_and_charges, f.company))
-		if flt(total_sale_value, 2) != flt(f.base_price, 2) and not _perms()["edit_price"]:
+		if flt(total_sale_value, 2) != flt(f.base_price, 2) and not _perms()["edit_price"]:  # before parking is added
 			frappe.throw(
 				_("Only {0} can book at a price different from the flat's base price ({1}).").format(", ".join(PRICE_ROLES), flt(f.base_price)),
 				frappe.PermissionError,
 			)
+
+		parking_amount = flt(parking_amount)
+		if parking_amount:
+			if not frappe.get_meta("Flat Booking").has_field("parking_amount"):
+				frappe.throw(_("Car parking is not set up on this site yet. Run bench migrate."))
+			if parking_amount != parking.default_amount() and not _perms()["edit_price"]:
+				frappe.throw(_("Only {0} can change the car parking price.").format(", ".join(PRICE_ROLES)), frappe.PermissionError)
+		total_sale_value = flt(total_sale_value) + parking_amount  # parking is part of the sale value; the invoice script splits it out again
 
 		if not customer and new_customer:
 			customer = _new_customer(new_customer)
@@ -1092,6 +1119,7 @@ def book_flat(flat, booking_date, total_sale_value, booking_amount, installment_
 				"company": f.company,
 				"cost_center": f.cost_center,
 				"total_sale_value": flt(total_sale_value, 2),
+				**({"parking_amount": parking_amount} if parking_amount else {}),
 				"booking_amount": flt(booking_amount, 2),
 				"installment_months": calc["months"],
 				"installment_start_date": installment_start_date,
@@ -1167,6 +1195,10 @@ def booking_info(flat):
 			"total_sale_value": b.total_sale_value,
 			"total_with_gst": b.total_with_gst,
 			"booking_amount": b.booking_amount,
+			"parking_amount": flt(b.get("parking_amount")),
+			"can_add_parking": b.docstatus == 1 and not cancelled and frappe.get_meta("Flat Booking").has_field("parking_amount") and frappe.has_permission("Flat Booking", "write", b.name),
+			"parking_default": parking.default_amount(),
+			"parking_splittable": any(r.status == "Pending" and not flt(r.amount_received) for r in b.installments),
 			"total_received": b.total_received,
 			"total_outstanding": b.total_outstanding,
 			"sales_invoice": b.sales_invoice,
@@ -1176,6 +1208,24 @@ def booking_info(flat):
 			"pending_cancellation": cancelled,
 		}
 	}
+
+
+@frappe.whitelist(methods=["POST"])
+def add_parking(booking, mode="installments", due_date=None, parking_amount=None):
+	"""Add car parking to a booking that already exists (single payment on a date, or split over its unpaid installments)."""
+	frappe.has_permission("Flat Booking", "write", booking, throw=True)
+	amount = flt(parking_amount) or parking.default_amount()
+	if amount != parking.default_amount() and not _perms()["edit_price"]:
+		frappe.throw(_("Only {0} can change the car parking price.").format(", ".join(PRICE_ROLES)), frappe.PermissionError)
+	if mode not in ("single", "installments"):
+		frappe.throw(_("Unknown payment option"))
+	frappe.db.savepoint("showcase_parking")
+	try:
+		si = parking.add_to_booking(booking, mode, due_date, amount)
+	except Exception:
+		_rollback("showcase_parking")
+		raise
+	return {"success": True, "sales_invoice": si}
 
 
 @frappe.whitelist(methods=["POST"])

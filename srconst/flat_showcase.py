@@ -19,6 +19,7 @@ POSITION = "showcase_plan_position"
 CUSTOM_FIELDS = {
 	"Flat": [
 		{"fieldname": "carpet_area_sqft", "fieldtype": "Float", "label": "Carpet Area (sq ft)", "insert_after": "area_sqft"},
+		{"fieldname": "uts_sqft", "fieldtype": "Float", "label": "UTS - Undivided Share in Land (sq ft)", "insert_after": "carpet_area_sqft"},
 		{"fieldname": "showcase_section", "fieldtype": "Section Break", "label": "Showcase (web view)", "insert_after": "remarks", "collapsible": 1},
 		{
 			"fieldname": POSITION, "fieldtype": "Int", "label": "Plan position", "insert_after": "showcase_section",
