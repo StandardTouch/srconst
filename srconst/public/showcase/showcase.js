@@ -176,7 +176,8 @@
 			const list = this.summaries;
 			const add = this.perms.create_site ? `<button class="srs-card add" data-act="addsite"><div class="plus">+</div><h3>${__("Add a site")}</h3><div class="loc">${__("Blocks, floors and flats")}</div></button>` : "";
 			this.q(".srs-cards").innerHTML = (list.length ? list.map((s) => `
-				<button class="srs-card ${s.empty ? "empty" : ""}" data-site="${esc(s.id)}" data-key="${esc((s.name + " " + (s.location || "")).toLowerCase())}">
+				<button class="srs-card ${s.empty ? "empty" : ""} ${s.hidden ? "off" : ""}" data-site="${esc(s.id)}" data-key="${esc((s.name + " " + (s.location || "")).toLowerCase())}">
+					${this.perms.create_site ? `<span class="del eye" role="button" title="${s.hidden ? __("Hidden: click to show") : __("Visible: click to hide")}" data-act="vis" data-id="${esc(s.id)}" data-show="${s.hidden ? 1 : 0}">${s.hidden ? "🚫" : "👁"}</span>` : ""}
 					${this.perms.create_site && s.cost_center ? `<span class="del" role="button" title="${__("Delete site")}" data-act="delsite" data-cc="${esc(s.cost_center)}" data-name="${esc(s.name)}">🗑</span>` : ""}
 					<div class="img" style="${s.image ? `background-image:url('${esc(s.image)}')` : ""}"></div>
 					<div class="shade"></div>
@@ -1434,6 +1435,7 @@
 			if (act === "present") return this.present();
 			if (act === "brochure") { const u = (this.block && this.block.brochure) || this.site.brochure; if (u) window.open(u, "_blank", "noopener"); return; }
 			if (act === "addsite") return this.openAddSite();
+			if (act === "vis") return call("set_site_visibility", { site_id: t.dataset.id, visible: t.dataset.show }).then(() => this.load());
 			if (act === "delsite") return this.deleteSite(t.dataset.cc, t.dataset.name);
 			if (act === "as-addrow") { this.asRead(); this.as.blocks.push(this.as.blank()); return this.renderAddSite(); }
 			if (act === "as-delrow") { this.asRead(); this.as.blocks.splice(+t.dataset.i, 1); return this.renderAddSite(); }
