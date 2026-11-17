@@ -102,6 +102,20 @@ def _hidden_cost_centers():
 	return {str(x).strip().lower() for x in (conf if isinstance(conf, (list, tuple)) else HIDDEN_COST_CENTERS)}
 
 
+def _hidden_sites():
+	return set(json.loads(frappe.db.get_default("showcase_hidden_sites") or "[]"))
+
+
+@frappe.whitelist(methods=["POST"])
+def set_site_visibility(site_id, visible):
+	"""Show or hide a site on the gallery (hidden sites stay visible, dimmed, to those who can add sites)."""
+	_require_create_site()
+	hidden = _hidden_sites()
+	hidden.discard(site_id) if cint(visible) else hidden.add(site_id)
+	frappe.db.set_default("showcase_hidden_sites", json.dumps(sorted(hidden)))
+	return {"success": True}
+
+
 def _sites():
 	"""Every construction site: each leaf Cost Center, with the Buildings booked to it. {site_id: {...}}
 
@@ -142,7 +156,11 @@ def _erp_summaries():
 	media = {m.building: m for m in frappe.get_all("Building Showcase", fields=["building", "building_image"], limit_page_length=0)}
 
 	out = []
+	hidden = _hidden_sites()
+	admin = _perms()["create_site"]
 	for s in sites.values():
+		if s["id"] in hidden and not admin:
+			continue
 		blocks = total = available = floors = 0
 		image = None
 		for b in s["buildings"]:
@@ -159,6 +177,7 @@ def _erp_summaries():
 			{
 				"id": s["id"],
 				"kind": "erp",
+				"hidden": s["id"] in hidden,
 				"name": s["name"],
 				"cost_center": s["cost_center"],
 				"developer": s["company"],
