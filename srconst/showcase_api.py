@@ -610,7 +610,7 @@ def flat_number(letter, floor_index, n):
 
 def _block_letter(building_name):
 	"""'BLOCK A' -> 'A', 'Tower 2' -> '2', 'Pride' -> 'P'"""
-	words = re.findall(r"[A-Za-z0-9]+", building_name or "")
+	words = re.findall(r"[A-Za-z0-9]+", (building_name or "").split(" - ")[0])  # "Block A - SR Pride" is block A
 	if not words:
 		return "X"
 	last = words[-1]
