@@ -90,6 +90,8 @@ class TestHelpers(unittest.TestCase):
 		self.assertEqual(api._block_letter("BLOCK A"), "A")
 		self.assertEqual(api._block_letter("Tower 2"), "2")
 		self.assertEqual(api._block_letter("Pride"), "P")
+		self.assertEqual(api._block_letter("Block A - SR Pride"), "A")
+		self.assertEqual(api._block_letter("Block B - darshaana pur"), "B")
 
 	def test_parse_hotspots_is_tolerant(self):
 		self.assertEqual(api._parse_hotspots(None), {})
